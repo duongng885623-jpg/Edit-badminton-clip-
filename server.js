@@ -123,6 +123,6 @@ process.on('uncaughtException', (err) => {
   console.error('Server Uncaught Exception:', err);
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`Sports HUD Node Server running at http://127.0.0.1:${PORT}/`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Sports HUD Node Server running at http://localhost:${PORT}/ and http://0.0.0.0:${PORT}/`);
 });
