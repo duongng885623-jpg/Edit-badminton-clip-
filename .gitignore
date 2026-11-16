@@ -1,0 +1,10 @@
+# Build & local test artifacts
+browser_profile/
+cert/
+*.jpg
+samples/*.png
+samples/*.jpg
+test_*.png
+test_*.jpg
+.DS_Store
+Thumbs.db

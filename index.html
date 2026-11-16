@@ -1,0 +1,498 @@
+﻿<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sports HUD AI - Tạo Video Thể Thao Phong Cách Truyền Hình (Cầu lông · Pickleball · Tennis)</title>
+  <script src="coi-serviceworker.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Bebas+Neue&display=swap" rel="stylesheet">
+  <script type="importmap">
+  {
+    "imports": {
+      "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.webgpu.min.mjs",
+      "mediabunny": "https://cdn.jsdelivr.net/npm/mediabunny@1.60.0/dist/bundles/mediabunny.min.mjs"
+    }
+  }
+  </script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <div id="browser-warn" class="browser-warn" role="alert" hidden>
+    <span data-i18n="browser.warn"></span>
+    <button class="ghost" id="browser-warn-x" data-i18n-title="close">✕</button>
+  </div>
+  <header class="topbar">
+    <a class="brand" href="#/"><span class="mark"></span>SPORTS <b>HUD AI</b></a>
+    <nav class="topnav" aria-label="Main">
+      <a href="#/" data-nav="home" data-i18n="menu.home"></a>
+      <a href="#/app" data-nav="app" data-i18n="menu.app"></a>
+      <a href="#/privacy" data-nav="privacy" data-i18n="menu.privacy"></a>
+    </nav>
+    <div class="sub" data-i18n="sub"></div>
+    <div class="badges">
+      <span id="badge-gpu" class="badge" data-i18n="badge.checking"></span>
+      <div class="lang" role="group" aria-label="Language"><button class="ghost" data-lang="vi">VI</button><button class="ghost" data-lang="en">EN</button></div>
+    </div>
+  </header>
+
+  <main class="page" data-view="home" hidden>
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow" data-i18n="home.eyebrow"></p>
+        <h1 data-i18n="home.title"></h1>
+        <p class="lead" data-i18n="home.lead"></p>
+        <div class="cta">
+          <a class="button primary" href="#/app" data-i18n="home.start"></a>
+          <a class="button coffee" href="https://buymeacoffee.com/gob123th" rel="noopener" target="_blank" data-i18n="support.button"></a>
+        </div>
+        <p class="hint" data-i18n="home.needs"></p>
+      </div>
+      <!-- a drawn illustration of the HUD, not a measurement: no footage ships with the app -->
+      <svg class="hero-art" viewBox="0 0 480 400" role="img" data-i18n-aria="home.art">
+        <rect x="0" y="0" width="480" height="400" rx="12" fill="#081329"/>
+        <polygon points="150,70 330,70 400,320 80,320" fill="#12564c"/>
+        <g fill="none" stroke="#e8f0ff" stroke-opacity=".75" stroke-width="1.5">
+          <polygon points="150,70 330,70 400,320 80,320"/>
+          <path d="M163,70 91,320 M317,70 389,320 M240,70V170 M240,220V320 M143,95H337 M126,170H354 M104,220 H376 M88,292H392"/>
+        </g>
+        <path d="M112,195H368" stroke="#00e5ff" stroke-width="3"/>
+        <path d="M192,250 C215,276 250,250 275,284" fill="none" stroke="#ff3d7f" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/>
+        <path d="M205,92 C225,120 262,105 272,134" fill="none" stroke="#00e5ff" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/>
+        <ellipse cx="272" cy="136" rx="20" ry="8" fill="#00e5ff" fill-opacity=".2" stroke="#00e5ff" stroke-width="2"/>
+        <ellipse cx="275" cy="286" rx="30" ry="12" fill="#ff3d7f" fill-opacity=".2" stroke="#ff3d7f" stroke-width="2"/>
+        <path d="M322,110 Q280,20 170,150" fill="none" stroke="#fff" stroke-opacity=".35" stroke-dasharray="4 7" stroke-width="2"/>
+        <circle cx="322" cy="110" r="8" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="2"/>
+        <g font-family="Bebas, sans-serif" fill="#e8f0ff">
+          <rect x="16" y="14" width="136" height="52" rx="4" fill="#060c18" fill-opacity=".9" stroke="#1f3260"/>
+          <text x="84" y="31" font-size="12" text-anchor="middle" fill="#9fb4d0" letter-spacing="1">RALLY COUNT</text>
+          <text x="84" y="57" font-size="24" text-anchor="middle">12 <tspan font-size="12" fill="#00e5ff">SHOT</tspan></text>
+          <rect x="328" y="14" width="136" height="52" rx="4" fill="#060c18" fill-opacity=".9" stroke="#1f3260"/>
+          <text x="396" y="31" font-size="12" text-anchor="middle" fill="#9fb4d0" letter-spacing="1">SHOT SPEED (EST.)</text>
+          <text x="396" y="57" font-size="24" text-anchor="middle">131 <tspan font-size="12" fill="#00e5ff">KM/H</tspan></text>
+          <rect x="16" y="336" width="448" height="50" rx="4" fill="#060c18" fill-opacity=".9" stroke="#1f3260"/>
+          <text x="30" y="355" font-size="12" fill="#9fb4d0" letter-spacing="1">PLAYER 1 · SPD · TOP · RALLY · MOVE</text>
+          <text x="30" y="377" font-size="18"><tspan fill="#00e5ff">3.1</tspan> M/S   ·   4.7   ·   12.4 M   ·   32.2 M</text>
+        </g>
+      </svg>
+    </section>
+
+    <section class="band">
+      <h2 data-i18n="home.how"></h2>
+      <ol class="how">
+        <li><b data-i18n="home.how1"></b><span data-i18n="home.how1d"></span></li>
+        <li><b data-i18n="home.how2"></b><span data-i18n="home.how2d"></span></li>
+        <li><b data-i18n="home.how3"></b><span data-i18n="home.how3d"></span></li>
+        <li><b data-i18n="home.how4"></b><span data-i18n="home.how4d"></span></li>
+      </ol>
+    </section>
+
+    <section class="band">
+      <h2 data-i18n="home.get"></h2>
+      <div class="grid3">
+        <div><h3 data-i18n="home.f1"></h3><p data-i18n="home.f1d"></p></div>
+        <div><h3 data-i18n="home.f2"></h3><p data-i18n="home.f2d"></p></div>
+        <div><h3 data-i18n="home.f3"></h3><p data-i18n="home.f3d"></p></div>
+        <div><h3 data-i18n="home.f4"></h3><p data-i18n="home.f4d"></p></div>
+        <div><h3 data-i18n="home.f5"></h3><p data-i18n="home.f5d"></p></div>
+        <div><h3 data-i18n="home.f6"></h3><p data-i18n="home.f6d"></p></div>
+      </div>
+    </section>
+
+    <section class="band split">
+      <div class="callout">
+        <h2 data-i18n="home.privacy"></h2>
+        <p data-i18n="home.privacyd"></p>
+        <a href="#/privacy" data-i18n="home.readPrivacy"></a>
+      </div>
+      <div>
+        <h2 data-i18n="home.limits"></h2>
+        <ul class="plain">
+          <li data-i18n="home.l1"></li>
+          <li data-i18n="home.l2"></li>
+          <li data-i18n="home.l3"></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="band split">
+      <div>
+        <h2 data-i18n="home.time"></h2>
+        <p class="body" data-i18n="home.timed"></p>
+        <ul class="plain">
+          <li data-i18n="home.t1"></li>
+          <li data-i18n="home.t2"></li>
+          <li data-i18n="home.t3"></li>
+        </ul>
+        <p class="hint" data-i18n="home.tip"></p>
+      </div>
+      <div class="callout warn">
+        <h2 data-i18n="home.device"></h2>
+        <p data-i18n="home.deviced"></p>
+      </div>
+    </section>
+
+    <section class="band support">
+      <div>
+        <h2 data-i18n="support.title"></h2>
+        <p data-i18n="support.text"></p>
+      </div>
+      <a class="button coffee" href="https://buymeacoffee.com/gob123th" rel="noopener" target="_blank" data-i18n="support.button"></a>
+    </section>
+  </main>
+
+  <main class="page prose" data-view="privacy" hidden>
+    <h1 data-i18n="privacy.title"></h1>
+    <p class="hint" data-i18n="privacy.updated"></p>
+    <p class="callout" data-i18n="privacy.summary"></p>
+
+    <h2 data-i18n="privacy.video"></h2>
+    <p data-i18n="privacy.videod"></p>
+
+    <h2 data-i18n="privacy.browser"></h2>
+    <p data-i18n="privacy.browserd"></p>
+    <ul class="plain">
+      <li data-i18n="privacy.b1"></li>
+      <li data-i18n="privacy.b2"></li>
+      <li data-i18n="privacy.b3"></li>
+    </ul>
+    <p data-i18n="privacy.browserEnd"></p>
+    <p><button class="ghost danger" id="btn-clear-data" data-i18n="privacy.clear"></button></p>
+
+    <h2 data-i18n="privacy.third"></h2>
+    <p data-i18n="privacy.thirdd"></p>
+    <div class="table-wrap">
+      <table>
+        <tr><th data-i18n="privacy.t.service"></th><th data-i18n="privacy.t.why"></th><th data-i18n="privacy.t.data"></th></tr>
+        <tr><td>Umami Cloud</td><td data-i18n="privacy.umami.why"></td><td data-i18n="privacy.umami.data"></td></tr>
+        <tr><td>jsDelivr</td><td data-i18n="privacy.cdn.why"></td><td data-i18n="privacy.net.data"></td></tr>
+        <tr><td>GitHub Pages</td><td data-i18n="privacy.host.why"></td><td data-i18n="privacy.net.data"></td></tr>
+      </table>
+    </div>
+    <p data-i18n="privacy.noAccount"></p>
+
+    <h2 data-i18n="privacy.people"></h2>
+    <p data-i18n="privacy.peopled"></p>
+
+    <h2 data-i18n="privacy.changes"></h2>
+    <p data-i18n="privacy.changesd"></p>
+
+    <h2 data-i18n="privacy.contact"></h2>
+    <p data-i18n="privacy.contactd"></p>
+
+    <h2 data-i18n="privacy.credits"></h2>
+    <ul class="plain">
+      <li>YOLO11-pose — Ultralytics (AGPL-3.0)</li>
+      <li>TrackNetV3 — qaz812345/TrackNetV3 (MIT)</li>
+      <li>WASB — nttcom/WASB-SBDT (MIT)</li>
+      <li>onnxruntime-web (MIT) · Mediabunny (MPL-2.0)</li>
+      <li>Kanit · Bebas Neue (SIL OFL)</li>
+    </ul>
+    <p data-i18n="privacy.creditsd"></p>
+  </main>
+
+  <main class="layout" data-view="app" hidden>
+    <aside class="panel">
+      <nav class="stepper" id="stepper">
+        <button data-go="video"><i>1</i><span data-i18n="step.video"></span></button>
+        <button data-go="court"><i>2</i><span data-i18n="step.court"></span></button>
+        <button data-go="players"><i>3</i><span data-i18n="step.players"></span></button>
+        <button data-go="render"><i>4</i><span data-i18n="step.render"></span></button>
+      </nav>
+      <section class="step" data-step="video">
+        <h2><i>1</i><span data-i18n="step.video"></span></h2>
+        <div class="row" style="margin-bottom: 12px;">
+          <label style="width: 100%;"><span data-i18n="sport.select"></span>
+            <select id="sport-select" style="font-weight: 600; font-size: 14px; color: #00E5FF; border: 1.5px solid rgba(0, 229, 255, 0.5); background: rgba(8, 16, 32, 0.9); padding: 8px 10px;">
+              <option value="badminton">🏸 Cầu lông (Badminton 13.4m × 6.1m)</option>
+              <option value="pickleball">🏓 Pickleball (Kitchen 2.13m)</option>
+              <option value="tennis">🎾 Quần vợt (Tennis 23.77m × 10.97m)</option>
+            </select>
+          </label>
+        </div>
+        <label class="drop" id="drop">
+          <input type="file" id="file" accept="video/*,.mp4,.mov,.mkv,.webm" hidden>
+          <div class="drop-icon">📹</div>
+          <span id="drop-text" data-i18n="drop" style="font-weight: 600;"></span>
+          <span style="font-size: 11.5px; color: var(--muted); margin-top: 4px;">Hỗ trợ MP4, MOV, MKV, WebM (Lên tới 4K 60fps)</span>
+        </label>
+        <div style="margin: 12px 0 6px;">
+          <span style="font-size: 11.5px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Clip mẫu thử nghiệm nhanh:</span>
+          <div class="row" style="margin-top: 6px; gap: 8px;">
+            <button type="button" class="ghost" id="btn-load-tennis" style="flex: 1; font-size: 12px; padding: 8px 10px; border-color: rgba(0, 229, 255, 0.35); background: rgba(0, 229, 255, 0.05);">🎾 Mẫu Tennis</button>
+            <button type="button" class="ghost" id="btn-load-pickle" style="flex: 1; font-size: 12px; padding: 8px 10px; border-color: rgba(0, 229, 255, 0.35); background: rgba(0, 229, 255, 0.05);">🏓 Mẫu Pickleball</button>
+          </div>
+        </div>
+        <div id="video-info" class="info muted"></div>
+        <div class="row range">
+          <label><span data-i18n="start"></span><input type="number" id="start" min="0" step="0.1" value="0"></label>
+          <label><span data-i18n="end"></span><input type="number" id="end" min="0" step="0.1"></label>
+        </div>
+        <div class="row">
+          <button class="ghost" id="btn-test15" data-i18n="test15"></button>
+          <button class="ghost" id="btn-full" data-i18n="full"></button>
+        </div>
+        <div class="step-nav">
+          <button class="primary" data-go="court" data-i18n="nav.next"></button>
+        </div>
+      </section>
+
+      <section class="step" data-step="court">
+        <h2><i>2</i><span data-i18n="step.court"></span></h2>
+        <div class="row">
+          <label><span data-i18n="orientation"></span>
+            <select id="orientation">
+              <option value="behind" data-i18n="orient.behind"></option>
+              <option value="side" data-i18n="orient.side"></option>
+            </select>
+          </label>
+        </div>
+        <div class="row" style="margin: 6px 0 8px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12.5px; color: var(--cyan); user-select: none;">
+            <input type="checkbox" id="show-guidelines" checked style="accent-color: var(--cyan); width: 16px; height: 16px; cursor: pointer;">
+            <span>📐 Hiện tia dóng mô phỏng (hỗ trợ canh góc bị khuất / ngoài hình)</span>
+          </label>
+        </div>
+        <div class="row pick" style="margin-top: 4px; margin-bottom: 8px;">
+          <label><span data-i18n="pick"></span><input type="range" id="court-pick-t" min="0" step="0.1" value="0"></label>
+          <input type="number" id="court-pick-n" min="0" step="0.1" value="0" data-i18n-title="seconds" data-i18n-aria="pick">
+          <button class="ghost" id="court-pick-prev" data-i18n-title="back1">◀</button>
+          <button class="ghost" id="court-pick-next" data-i18n-title="fwd1">▶</button>
+        </div>
+        <div class="row">
+          <button class="ghost" id="btn-undo">↶ <span data-i18n="undo"></span></button>
+          <button class="ghost" id="btn-reset">🔄 <span data-i18n="reset"></span></button>
+        </div>
+        <div class="callout" style="padding: 10px 14px; margin-top: 10px; border-radius: 8px; font-size: 12.5px; border-left: 3px solid var(--cyan);">
+          💡 <b>Hướng dẫn:</b> Nhấp 4 góc ngoài của sân đôi trên hình theo thứ tự bất kỳ. Kéo thả các điểm để đường màu xanh khớp với vạch sân. Vùng đệm 40% cho phép kéo điểm ra ngoài video nếu sân bị khuất mép. Bạn có thể dùng thanh tua ở trên để chọn khung hình rõ nhất.
+        </div>
+        <div id="court-status" class="status"></div>
+        <div class="step-nav">
+          <button class="ghost" data-go="video" data-i18n="nav.back"></button>
+          <button class="primary" data-go="players" data-i18n="nav.next"></button>
+        </div>
+      </section>
+
+      <section class="step" data-step="players">
+        <h2><i>3</i><span data-i18n="step.players"></span></h2>
+        <div class="row pick">
+          <label><span data-i18n="pick"></span><input type="range" id="pick-t" min="0" step="0.1" value="0"></label>
+          <input type="number" id="pick-n" min="0" step="0.1" value="0" data-i18n-title="seconds" data-i18n-aria="pick">
+          <button class="ghost" id="pick-prev" data-i18n-title="back1">◀</button>
+          <button class="ghost" id="pick-next" data-i18n-title="fwd1">▶</button>
+        </div>
+        <div class="row" style="margin-top: 10px;">
+          <button class="primary" id="btn-detect" style="flex: 1.2; padding: 10px 14px; font-weight: 600;">📸 <span data-i18n="detect"></span></button>
+          <button class="ghost" id="btn-add-player" style="flex: 1; padding: 10px 14px;">➕ <span data-i18n="addPlayer"></span></button>
+        </div>
+        <div id="cards" class="cards"></div>
+        <div id="assign-status" class="status"></div>
+        <p class="hint" data-i18n="players.hint"></p>
+        <div class="row">
+          <button class="ghost" id="btn-export">Export config</button>
+          <label class="ghost button">Import<input type="file" id="import" accept=".json" hidden></label>
+        </div>
+        <div class="step-nav">
+          <button class="ghost" data-go="court" data-i18n="nav.back"></button>
+          <button class="primary" data-go="render" data-i18n="nav.next"></button>
+        </div>
+      </section>
+
+      <section class="step" data-step="render">
+        <h2><i>4</i><span data-i18n="step.render"></span></h2>
+        <div class="row">
+          <label><span data-i18n="model"></span>
+            <select id="model">
+              <option value="models/yolo11s-pose.onnx" data-i18n="model.s"></option>
+              <option value="models/yolo11n-pose.onnx" data-i18n="model.n"></option>
+            </select>
+          </label>
+          <label><span data-i18n="stride"></span>
+            <select id="stride">
+              <option value="1" data-i18n="stride.1"></option>
+              <option value="2" data-i18n="stride.2"></option>
+              <option value="3" data-i18n="stride.3"></option>
+              <option value="5" data-i18n="stride.5"></option>
+            </select>
+          </label>
+        </div>
+        <div class="toggles">
+          <label><input type="checkbox" id="r-tags"> <span data-i18n="opt.tags"></span></label>
+          <label><input type="checkbox" id="r-topHud"> <span data-i18n="opt.topHud"></span></label>
+          <label><input type="checkbox" id="r-playerPanel"> <span data-i18n="opt.playerPanel"></span></label>
+          <label><input type="checkbox" id="r-playerStats"> <span data-i18n="opt.playerStats"></span></label>
+          <label><input type="checkbox" id="r-courtMap"> <span data-i18n="opt.courtMap"></span></label>
+          <label><input type="checkbox" id="r-trails"> <span data-i18n="opt.trails"></span></label>
+          <label><input type="checkbox" id="r-skeleton"> <span data-i18n="opt.skeleton"></span></label>
+          <label><input type="checkbox" id="r-shuttle"> <span data-i18n="opt.shuttle"></span></label>
+          <label data-i18n-title="opt.assist.tip"><input type="checkbox" id="m-assist"> <span data-i18n="opt.assist"></span></label>
+          <label><input type="checkbox" id="r-showIds"> <span data-i18n="opt.showIds"></span></label>
+        </div>
+        <div class="style-opts">
+          <div class="row">
+            <label><span data-i18n="tag.size"></span>
+              <select id="tag-size">
+                <option value="0.6" data-i18n="tag.small"></option>
+                <option value="0.8" data-i18n="tag.medium"></option>
+                <option value="1" data-i18n="tag.large"></option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <label><span data-i18n="stage"></span>
+              <select id="stage-mode">
+                <option value="overlay" data-i18n="stage.overlay"></option>
+                <option value="landscape" data-i18n="stage.landscape"></option>
+                <option value="portrait" data-i18n="stage.portrait"></option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <label><span data-i18n="theme"></span>
+              <select id="theme">
+                <option value="broadcast" data-i18n="theme.broadcast"></option>
+                <option value="esports" data-i18n="theme.esports"></option>
+                <option value="gold" data-i18n="theme.gold"></option>
+                <option value="volt" data-i18n="theme.volt"></option>
+                <option value="light" data-i18n="theme.light"></option>
+              </select>
+            </label>
+            <label><span data-i18n="frame"></span>
+              <select id="frame">
+                <option value="angled" data-i18n="frame.angled"></option>
+                <option value="rounded" data-i18n="frame.rounded"></option>
+                <option value="tech" data-i18n="frame.tech"></option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <label><span data-i18n="ring.style"></span>
+              <select id="ring-style">
+                <option value="neon" data-i18n="ring.neon"></option>
+                <option value="solid" data-i18n="ring.solid"></option>
+                <option value="minimal" data-i18n="ring.minimal"></option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <label><span data-i18n="ring.color"></span>
+              <select id="ring-color">
+                <option value="player" data-i18n="ring.byPlayer"></option>
+                <option value="team" data-i18n="ring.byTeam"></option>
+                <option value="theme" data-i18n="ring.byTheme"></option>
+              </select>
+            </label>
+            <span id="team-colors" class="team-colors">
+              <label class="inline">A <input type="color" id="tc-A"></label>
+              <label class="inline">B <input type="color" id="tc-B"></label>
+            </span>
+          </div>
+        </div>
+        <div class="badge-opts">
+          <label class="inline"><input type="checkbox" id="r-shuttleMark"> <span data-i18n="opt.shuttleMark"></span></label>
+          <label class="inline"><input type="checkbox" id="r-smash"> <span data-i18n="opt.smash"></span></label>
+          <div class="row">
+            <label><span data-i18n="smash.min"></span><input type="number" id="smash-min" min="1" max="420" step="10"></label>
+          </div>
+          <div class="row">
+            <label><span data-i18n="badge.mode"></span>
+              <select id="badge-mode">
+                <option value="hit" data-i18n="badge.hit"></option>
+                <option value="fixed" data-i18n="badge.fixed"></option>
+                <option value="off" data-i18n="badge.off"></option>
+              </select>
+            </label>
+            <label><span data-i18n="badge.secs"></span>
+              <select id="badge-secs">
+                <option value="0.5">0.5</option><option value="0.7">0.7</option><option value="1">1</option>
+                <option value="1.5">1.5</option><option value="2">2</option><option value="3">3</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint" data-i18n="badge.ranks"></p>
+          <div class="row ranks">
+            <label>SSS <input type="number" id="rank-SSS" min="1" max="999" step="10"></label>
+            <label>SS <input type="number" id="rank-SS" min="1" max="999" step="10"></label>
+            <label>S <input type="number" id="rank-S" min="1" max="999" step="10"></label>
+            <label>A <input type="number" id="rank-A" min="1" max="999" step="10"></label>
+            <label>B <input type="number" id="rank-B" min="1" max="999" step="10"></label>
+          </div>
+        </div>
+        <p class="hint" data-i18n="layout.hint"></p>
+        <div class="row"><button class="ghost" id="btn-layout-reset" data-i18n="layout.reset"></button></div>
+        <div class="score-opts">
+          <label class="inline"><input type="checkbox" id="score-on"> <span data-i18n="score.on"></span></label>
+          <div class="row">
+            <label><span data-i18n="score.startA"></span><input type="number" id="score-a" min="0" max="30" step="1"></label>
+            <label><span data-i18n="score.startB"></span><input type="number" id="score-b" min="0" max="30" step="1"></label>
+          </div>
+          <label class="inline"><input type="checkbox" id="score-review"> <span data-i18n="score.review"></span></label>
+        </div>
+        <div class="hl-opts">
+          <label class="inline"><input type="checkbox" id="hl-on"> <span data-i18n="hl.on"></span></label>
+          <div class="row">
+            <label><span data-i18n="hl.count"></span>
+              <select id="hl-count">
+                <option value="3">3</option><option value="5">5</option><option value="8">8</option>
+                <option value="0" data-i18n="hl.all"></option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="row" style="margin-top: 12px; margin-bottom: 12px;">
+          <label style="width: 100%;"><span data-i18n="quality.select"></span>
+            <select id="quality-select" style="font-weight: 600; font-size: 13.5px; color: #10B981; border: 1.5px solid rgba(16, 185, 129, 0.4); background: rgba(8, 16, 32, 0.9); padding: 8px 10px;">
+              <option value="ultra" selected data-i18n="quality.ultra"></option>
+              <option value="high" data-i18n="quality.high"></option>
+              <option value="medium" data-i18n="quality.medium"></option>
+            </select>
+          </label>
+        </div>
+        <label class="inline"><input type="checkbox" id="save-direct" checked> <span data-i18n="saveDirect"></span></label>
+        <div class="row" style="margin-top: 14px;">
+          <button class="primary" id="btn-render" style="flex: 1; padding: 12px 20px; font-size: 14px; font-weight: 700; letter-spacing: 0.5px;">🚀 <span data-i18n="render"></span></button>
+          <button class="ghost danger" id="btn-cancel" disabled style="padding: 12px 16px;">🛑 <span data-i18n="cancel"></span></button>
+        </div>
+        <div class="progress"><div id="bar"></div></div>
+        <div id="render-status" class="status"></div>
+        <div id="review" class="review" hidden>
+          <p id="review-head" class="hint"></p>
+          <ol id="review-rows" class="review-rows"></ol>
+          <div id="review-final" class="review-final"></div>
+          <button class="primary" id="btn-review-ok" data-i18n="rv.ok"></button>
+        </div>
+        <div id="downloads" class="row"></div>
+        <div id="report" class="report" hidden></div>
+        <div class="step-nav">
+          <button class="ghost" data-go="players" data-i18n="nav.back"></button>
+        </div>
+      </section>
+    </aside>
+
+    <section class="stage">
+      <div class="stage-head">
+        <span id="stage-title"></span>
+        <span class="live-tag">WebGPU Active</span>
+      </div>
+      <div class="stage-body">
+        <canvas id="stage" hidden></canvas>
+        <canvas id="out" hidden></canvas>
+        <div id="empty" class="empty">
+          <div class="empty-mark"></div>
+          <p data-i18n="empty"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="site-foot">
+    <span data-i18n="foot.local"></span>
+    <a href="#/privacy" data-i18n="menu.privacy"></a>
+    <a href="https://github.com/duongng885623-jpg/Edit-badminton-clip-" rel="noopener" target="_blank">GitHub</a>
+    <a href="https://buymeacoffee.com/gob123th" rel="noopener" target="_blank">Buy Me a Coffee</a>
+  </footer>
+  <div id="toast" class="toast" hidden></div>
+</body>
+</html>
+

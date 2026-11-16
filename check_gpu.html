@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Kiem tra WebGPU Nang Cao</title>
+  <style>
+    body { background: #060c18; color: #e8f0ff; font-family: monospace; padding: 30px; font-size: 15px; line-height: 1.6; }
+    .box { background: #0c1730; border: 1px solid #1f3260; border-radius: 8px; padding: 20px; max-width: 800px; margin-top: 20px; }
+    .ok { color: #7CFF4F; font-weight: bold; }
+    .err { color: #FF5252; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h2>🔍 KẾT QUẢ THỬ NGHIỆM TẤT CẢ BACKEND CỦA WEBGPU</h2>
+  <div class="box" id="res">Đang kiểm tra...</div>
+
+  <script>
+    (async () => {
+      const out = document.getElementById('res');
+      let log = '';
+
+      if (!navigator.gpu) {
+        out.innerHTML = '<p class="err">navigator.gpu không tồn tại.</p>';
+        return;
+      }
+
+      const tests = [
+        { name: 'Mặc định (Default)', opts: {} },
+        { name: 'Hiệu năng cao (high-performance)', opts: { powerPreference: 'high-performance' } },
+        { name: 'Tiết kiệm pin (low-power)', opts: { powerPreference: 'low-power' } },
+        { name: 'Fallback adapter (CPU compatibility)', opts: { forceFallbackAdapter: true } },
+      ];
+
+      for (const t of tests) {
+        try {
+          const adapter = await navigator.gpu.requestAdapter(t.opts);
+          if (adapter) {
+            log += '<p class="ok">✓ ' + t.name + ': KẾT NỐI THÀNH CÔNG!</p>';
+            try {
+              const info = await adapter.requestAdapterInfo();
+              log += '<div style="margin-left:20px;color:#00E5FF;">';
+              log += '• Vendor: ' + info.vendor + '<br>';
+              log += '• Architecture: ' + info.architecture + '<br>';
+              log += '• Device: ' + info.device + '<br>';
+              log += '• Description: ' + info.description + '<br>';
+              log += '</div>';
+            } catch (e) {
+              log += '<div style="margin-left:20px;">• Adapter sẵn sàng nhưng không đọc được info: ' + e.message + '</div>';
+            }
+          } else {
+            log += '<p class="err">✗ ' + t.name + ': requestAdapter() trả về null</p>';
+          }
+        } catch (err) {
+          log += '<p class="err">✗ ' + t.name + ' Lỗi: ' + err.message + '</p>';
+        }
+      }
+
+      out.innerHTML = log;
+    })();
+  </script>
+</body>
+</html>
