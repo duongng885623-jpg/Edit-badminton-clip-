@@ -173,7 +173,7 @@ export class Stage {
     if (this.mode === 'calibrate') {
       const court = this.court(), u = this.unit();
       if (court) {
-        court.drawLines(ctx, '#D4F82C', Math.max(2.5 * s, 2 * u));
+        court.drawLines(ctx, '#00ff66', Math.max(2.5 * s, 2 * u));
         if (this.showGuidelines) {
           court.drawExtendedGuidelines(ctx, Math.max(1.5 * s, 1.2 * u));
         }

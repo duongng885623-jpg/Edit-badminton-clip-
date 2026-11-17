@@ -179,8 +179,18 @@ function renderCards() {
     name.value = p.name; color.value = p.color; team.value = p.team; side.value = p.side;
     name.oninput = () => { p.name = name.value; save(); labelStage(); };
     color.oninput = () => { p.color = color.value.toUpperCase(); card.style.setProperty('--c', p.color); save(); labelStage(); };
-    team.onchange = () => { p.team = team.value; save(); };
-    side.onchange = () => { p.side = side.value; save(); };
+    team.onchange = () => {
+      p.team = team.value;
+      if (p.team === 'A') { p.side = 'far'; side.value = 'far'; }
+      else if (p.team === 'B') { p.side = 'near'; side.value = 'near'; }
+      save(); labelStage();
+    };
+    side.onchange = () => {
+      p.side = side.value;
+      if (p.side === 'far') { p.team = 'A'; team.value = 'A'; }
+      else if (p.side === 'near') { p.team = 'B'; team.value = 'B'; }
+      save(); labelStage();
+    };
     const pin = card.querySelector('.pin-btn');
     if (pin) pin.onclick = e => {
       e.stopPropagation();
@@ -212,12 +222,14 @@ function labelStage() {
 
 function playerFromDet(d, i, prev) {
   const court = stage.court();
-  const side = court ? (court.isFar(d.court) ? 'far' : 'near') : (d.court[1] < 6.7 ? 'far' : 'near');
+  const isFar = court ? court.isFar(d.court) : (d.court[1] < 6.7);
+  const side = isFar ? 'far' : 'near';
+  const team = isFar ? 'A' : 'B';
   return {
     name: prev?.name ?? t('playerN', { n: i + 1 }),
     color: prev?.color ?? PALETTE[i % PALETTE.length],
-    team: prev?.team ?? (side === 'far' ? 'A' : 'B'),
-    side,
+    team: prev?.team ?? team,
+    side: prev?.side ?? side,
     thumb: crop(state.frame, d.box, 'thumb'),
     avatar: crop(state.frame, d.box, 'avatar'),
     seed: d.court.map(v => +v.toFixed(3)), seedT: state.frameT, detIndex: i,
@@ -254,46 +266,55 @@ async function detectPlayersNow() {
     setStatus('assign-status', () => t('detecting'));
     const { width: W, height: H } = state.frame;
     const raw = await det.detect(state.frame, W, H, state.cfg.model.iou, court.farTiles(W, H));
-    const dets = raw.filter(d => {
-      const f = footPoint(d), c = court.toCourt(f[0], f[1]);
-      const isFar = court.isFar(c);
-      // For far players who appear smaller in camera perspective, use permissive threshold
-      const minScore = isFar ? 0.16 : Math.max(0.18, (state.cfg.model.conf || 0.25) - 0.05);
-      return d.score >= minScore;
-    }).map(d => {
+    const minConf = state.cfg.model.conf ?? 0.25;
+    const dets = raw.filter(d => d.score >= minConf).map(d => {
       const f = footPoint(d), c = court.toCourt(f[0], f[1]);
       return { ...d, foot: f, court: c };
     });
     const inCourt = dets.filter(d => court.inPlay(d.court));
 
-    // Group into far side and near side
-    const farDets = inCourt.filter(d => court.isFar(d.court)).sort((a, b) => a.court[0] - b.court[0]);
-    const nearDets = inCourt.filter(d => !court.isFar(d.court)).sort((a, b) => a.court[0] - b.court[0]);
+    // Group candidates by court side
+    const farDets = inCourt.filter(d => court.isFar(d.court));
+    const nearDets = inCourt.filter(d => !court.isFar(d.court));
 
-    // In racquet sports (doubles or singles), ensure balanced selection from BOTH sides of the net!
-    let chosen = [];
-    if (farDets.length > 0 && nearDets.length > 0) {
-      chosen = farDets.slice(0, 2).concat(nearDets.slice(0, 2));
-      for (const d of inCourt) if (!chosen.includes(d)) chosen.push(d);
-    } else {
-      chosen = inCourt.slice();
-    }
+    // Prioritize active players: confidence score & central playing position
+    farDets.sort((a, b) => {
+      const distA = Math.hypot(a.court[0] - court.W / 2, a.court[1] - court.netY * 0.5);
+      const distB = Math.hypot(b.court[0] - court.W / 2, b.court[1] - court.netY * 0.5);
+      return (b.score * 2 - distA * 0.15) - (a.score * 2 - distB * 0.15);
+    });
+    const bestFar = farDets.slice(0, 2).sort((a, b) => a.court[0] - b.court[0]);
 
-    state.dets = chosen.concat(dets.filter(d => !chosen.includes(d)));   // outsiders clickable too
+    nearDets.sort((a, b) => {
+      const distA = Math.hypot(a.court[0] - court.W / 2, a.court[1] - (court.netY + court.L) * 0.5);
+      const distB = Math.hypot(b.court[0] - court.W / 2, b.court[1] - (court.netY + court.L) * 0.5);
+      return (b.score * 2 - distA * 0.15) - (a.score * 2 - distB * 0.15);
+    });
+    const bestNear = nearDets.slice(0, 2).sort((a, b) => a.court[0] - b.court[0]);
+
+    // Active roster: Far players (Team A) first, then Near players (Team B)
+    const chosen = bestFar.concat(bestNear);
+
+    // Outsiders / spectators remain clickable on canvas but NOT added to cfg.players
+    state.dets = chosen.concat(dets.filter(d => !chosen.includes(d)));
     stage.dets = state.dets;
+
     const fresh = chosen.map((d, i) => {
+      const isFar = court.isFar(d.court);
       const p = playerFromDet(d, i, null);
-      p.team = court.isFar(d.court) ? 'A' : 'B';
+      p.team = isFar ? 'A' : 'B';
+      p.side = isFar ? 'far' : 'near';
       return p;
     });
     const prev = state.cfg.players;
     const match = prev.length === fresh.length ? matchCards(prev, fresh) : []; // same line-up → keep names/colors
-    state.cfg.players = fresh.map((p, i) => match[i] ? { ...p, name: match[i].name, color: match[i].color, team: match[i].team } : p);
+    state.cfg.players = fresh.map((p, i) => match[i] ? { ...p, name: match[i].name, color: match[i].color, team: match[i].team, side: match[i].side } : p);
     state.hl = state.cfg.players.length ? 0 : -1;
     save(); renderCards(); labelStage();
-    const nIn = inCourt.length, nOut = dets.length - inCourt.length;
-    setStatus('assign-status', () => t('found', { n: nIn }) + (nOut ? t('foundOut', { n: nOut }) : ''), nIn ? 'ok' : 'warn');
-    if (inCourt.length) $('cards').querySelector('input[type=text]')?.focus();
+
+    const nIn = chosen.length, nExtra = dets.length - chosen.length;
+    setStatus('assign-status', () => `✓ Tìm thấy ${nIn} người chơi (${bestFar.length} sân xa · Đội A, ${bestNear.length} sân gần · Đội B)` + (nExtra > 0 ? ` · ${nExtra} người ngoài sân` : ''), 'ok');
+    if (nIn) $('cards').querySelector('input[type=text]')?.focus();
   } catch (e) { setStatus('assign-status', e.message, 'err'); }
 }
 $('btn-detect').onclick = detectPlayers;
@@ -816,7 +837,7 @@ $('btn-render').onclick = async () => {
     const assist = shuttle && state.cfg.model.assist ? await getAssist('render-status') : null;
     const cfg = structuredClone(state.cfg);
     const seeds = {};
-    cfg.players.forEach((p, i) => { if (p.seed && Math.abs((p.seedT ?? -1) - start) < 0.05) seeds[i] = p.seed; });
+    cfg.players.forEach((p, i) => { if (p.seed && Math.abs((p.seedT ?? -1) - start) < 3.0) seeds[i] = p.seed; });
     const res = await renderVideo({
       vid: state.vid, cfg, court: new Court(stage.points, cfg.court.orientation, cfg.court.marginM, cfg.sport),
       detector, shuttle, assist, seeds, start, end, canvas: out, fileHandle, signal: state.abort.signal,
