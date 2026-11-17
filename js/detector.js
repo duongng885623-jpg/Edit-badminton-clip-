@@ -96,9 +96,13 @@ export class PoseDetector {
     const out = await this.session.run({ [this.inputName]: new ort.Tensor('float32', inp, [1, 3, SIZE, SIZE]) });
     const o = out[this.outputName].data, N = NUM_ANCHORS;
     const X = v => (v - px) / s + rx, Y = v => (v - py) / s + ry;
-    // a crop cuts people at its edges: drop boxes touching an edge that is not also the frame edge
-    const E = 3 / s, cut = b => (rx > 0 && b[0] < rx + E) || (ry > 0 && b[1] < ry + E)
-      || (rx + rw < w && b[2] > rx + rw - E) || (ry + rh < h && b[3] > ry + rh - E);
+    // a crop cuts people at its edges: only drop if the center of mass of the person lies outside the ROI crop
+    const cut = b => {
+      if (rw === w && rh === h) return false;
+      const midX = (b[0] + b[2]) / 2, midY = (b[1] + b[3]) / 2;
+      return (rx > 0 && midX < rx) || (ry > 0 && midY < ry)
+        || (rx + rw < w && midX > rx + rw) || (ry + rh < h && midY > ry + rh);
+    };
 
     const cands = [];
     for (let i = 0; i < N; i++) {

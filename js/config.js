@@ -3,9 +3,9 @@ export const DEFAULT_CONFIG = {
   sport: 'badminton', // 'badminton', 'pickleball', 'tennis'
   quality: 'ultra', // 'ultra' (gốc/nét cao), 'high' (tiêu chuẩn), 'medium' (tiết kiệm)
   players: [],     // never preset: cards come from detection on the user's own clip
-  court: { orientation: 'behind', marginM: 1.2, showGuidelines: true },
+  court: { orientation: 'behind', marginM: 2.5, showGuidelines: true },
   rev: 1,          // saved configs below this get the migration in loadConfig()
-  model: { file: 'models/yolo11n-pose.onnx', conf: 0.3, iou: 0.5, stride: 2, assist: false }, // default optimized for speed & high accuracy
+  model: { file: 'models/yolo11n-pose.onnx', conf: 0.25, iou: 0.5, stride: 2, assist: false }, // default optimized for speed & high accuracy
   tracking: { maxSpeed: 7, maxJump: 1.5, lostTtl: 1.0 },
   stamina: { start: 100, drainPerMeter: 0.25, min: 5 },
   stats: { deadbandM: 0.15 },

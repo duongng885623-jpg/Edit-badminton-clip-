@@ -105,7 +105,7 @@ export function orderCorners(pts) {
 }
 
 export class Court {
-  constructor(imageCorners, orientation = 'behind', marginM = 1.2, sport = CURRENT_SPORT) {
+  constructor(imageCorners, orientation = 'behind', marginM = 2.5, sport = CURRENT_SPORT) {
     this.sport = sport;
     const cfg = getSportConfig(sport);
     this.W = cfg.W;
@@ -113,7 +113,7 @@ export class Court {
     this.netY = cfg.L / 2;
     this.corners = orderCorners(imageCorners);
     this.orientation = orientation;
-    this.marginM = marginM;
+    this.marginM = marginM ?? 2.5;
     this.H = findHomography(this.corners, this.standardCorners(this.W, this.L));
     this.Hinv = invert3x3(this.H);
     if (!Number.isFinite(this.H[0][0]) || !Number.isFinite(this.Hinv[0][0])) {
@@ -208,11 +208,29 @@ export class Court {
   isFar([x, y]) { return y < this.netY; }
 
   farTiles(W, H) {
-    const p0 = this.toImage(0, 0), p1 = this.toImage(this.W, 0);
-    const p2 = this.toImage(this.W, this.netY), p3 = this.toImage(0, this.netY);
-    const xs = [p0[0], p1[0], p2[0], p3[0]], ys = [p0[1], p1[1], p2[1], p3[1]];
-    const x1 = Math.max(0, Math.floor(Math.min(...xs))), y1 = Math.max(0, Math.floor(Math.min(...ys)));
-    const x2 = Math.min(W, Math.ceil(Math.max(...xs))), y2 = Math.min(H, Math.ceil(Math.max(...ys)));
+    // Generate far court ROI that comfortably includes:
+    // 1. Players standing up to 2.5m behind the far baseline
+    // 2. Players standing up to 2.0m outside the left/right sidelines
+    // 3. Players standing up to 1.5m past the net line
+    // 4. Headroom: Far players' heads and racquets extend ~28% of frame height above their feet
+    const pts = [];
+    for (const [cx, cy] of [
+      [-2.0, -2.5], [this.W + 2.0, -2.5],
+      [this.W + 2.0, this.netY + 1.5], [-2.0, this.netY + 1.5],
+      [0, 0], [this.W, 0], [this.W, this.netY], [0, this.netY]
+    ]) {
+      try {
+        const [ix, iy] = this.toImage(cx, cy);
+        if (Number.isFinite(ix) && Number.isFinite(iy)) pts.push([ix, iy]);
+      } catch {}
+    }
+    if (pts.length < 4) return [];
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    const headRoom = Math.round(H * 0.28);
+    const x1 = Math.max(0, Math.floor(Math.min(...xs) - 20));
+    const y1 = Math.max(0, Math.floor(Math.min(...ys) - headRoom));
+    const x2 = Math.min(W, Math.ceil(Math.max(...xs) + 20));
+    const y2 = Math.min(H, Math.ceil(Math.max(...ys) + 25));
     if (x2 <= x1 || y2 <= y1) return [];
     return [[x1, y1, x2 - x1, y2 - y1]];
   }

@@ -254,16 +254,38 @@ async function detectPlayersNow() {
     setStatus('assign-status', () => t('detecting'));
     const { width: W, height: H } = state.frame;
     const raw = await det.detect(state.frame, W, H, state.cfg.model.iou, court.farTiles(W, H));
-    const dets = raw.filter(d => d.score >= state.cfg.model.conf).map(d => {
+    const dets = raw.filter(d => {
+      const f = footPoint(d), c = court.toCourt(f[0], f[1]);
+      const isFar = court.isFar(c);
+      // For far players who appear smaller in camera perspective, use permissive threshold
+      const minScore = isFar ? 0.16 : Math.max(0.18, (state.cfg.model.conf || 0.25) - 0.05);
+      return d.score >= minScore;
+    }).map(d => {
       const f = footPoint(d), c = court.toCourt(f[0], f[1]);
       return { ...d, foot: f, court: c };
     });
     const inCourt = dets.filter(d => court.inPlay(d.court));
-    // far side first, then near; left → right on court
-    inCourt.sort((a, b) => (court.isFar(a.court) ? 0 : 1) - (court.isFar(b.court) ? 0 : 1) || a.court[0] - b.court[0]);
-    state.dets = inCourt.concat(dets.filter(d => !court.inPlay(d.court)));   // outsiders clickable too
+
+    // Group into far side and near side
+    const farDets = inCourt.filter(d => court.isFar(d.court)).sort((a, b) => a.court[0] - b.court[0]);
+    const nearDets = inCourt.filter(d => !court.isFar(d.court)).sort((a, b) => a.court[0] - b.court[0]);
+
+    // In racquet sports (doubles or singles), ensure balanced selection from BOTH sides of the net!
+    let chosen = [];
+    if (farDets.length > 0 && nearDets.length > 0) {
+      chosen = farDets.slice(0, 2).concat(nearDets.slice(0, 2));
+      for (const d of inCourt) if (!chosen.includes(d)) chosen.push(d);
+    } else {
+      chosen = inCourt.slice();
+    }
+
+    state.dets = chosen.concat(dets.filter(d => !chosen.includes(d)));   // outsiders clickable too
     stage.dets = state.dets;
-    const fresh = inCourt.map((d, i) => playerFromDet(d, i, null));
+    const fresh = chosen.map((d, i) => {
+      const p = playerFromDet(d, i, null);
+      p.team = court.isFar(d.court) ? 'A' : 'B';
+      return p;
+    });
     const prev = state.cfg.players;
     const match = prev.length === fresh.length ? matchCards(prev, fresh) : []; // same line-up → keep names/colors
     state.cfg.players = fresh.map((p, i) => match[i] ? { ...p, name: match[i].name, color: match[i].color, team: match[i].team } : p);

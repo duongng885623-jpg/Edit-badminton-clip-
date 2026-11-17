@@ -32,13 +32,13 @@ export class Stage {
   }
 
   get pad() { return this.mode === 'calibrate' ? this.padPx : 0; }
-  // border wide enough for off-frame corners; expanded to 0.40 (40%) to allow clicking far outside the video frame
+  // border wide enough for off-frame corners; expanded to 0.55 (55%) for generous breathing space
   fitPad() {
     const f = this.frame;
     if (!f) return;
-    let need = 0.40 * Math.max(f.width, f.height);
+    let need = 0.55 * Math.max(f.width, f.height);
     for (const [x, y] of this.points) need = Math.max(need, -x, -y, x - f.width, y - f.height);
-    this.padPx = Math.round(need + 0.08 * f.height);
+    this.padPx = Math.round(need + 0.12 * f.height);
   }
 
   setFrame(frame) {
@@ -162,9 +162,9 @@ export class Stage {
     const cw = Math.round(W * this.k), ch = Math.round(H * this.k);
     if (this.canvas.width !== cw || this.canvas.height !== ch) { this.canvas.width = cw; this.canvas.height = ch; }
     ctx.setTransform(this.k, 0, 0, this.k, 0, 0);
-    ctx.fillStyle = '#050914'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#050810'; ctx.fillRect(0, 0, W, H);
     // Draw subtle border guides around the real video frame
-    ctx.strokeStyle = 'rgba(0, 229, 255, 0.25)'; ctx.lineWidth = Math.max(1, 1.5 * this.unit());
+    ctx.strokeStyle = 'rgba(212, 248, 44, 0.35)'; ctx.lineWidth = Math.max(1, 1.5 * this.unit());
     ctx.strokeRect(pad, pad, f.width, f.height);
     ctx.drawImage(f, pad, pad);
     const s = f.height / 720;
@@ -173,7 +173,7 @@ export class Stage {
     if (this.mode === 'calibrate') {
       const court = this.court(), u = this.unit();
       if (court) {
-        court.drawLines(ctx, '#39ff88', Math.max(2 * s, 1.5 * u));
+        court.drawLines(ctx, '#D4F82C', Math.max(2.5 * s, 2 * u));
         if (this.showGuidelines) {
           court.drawExtendedGuidelines(ctx, Math.max(1.5 * s, 1.2 * u));
         }
@@ -185,7 +185,7 @@ export class Stage {
           const ex0 = [p0[0] - (dx / len) * 2000, p0[1] - (dy / len) * 2000];
           const ex1 = [p1[0] + (dx / len) * 2000, p1[1] + (dy / len) * 2000];
           ctx.save();
-          ctx.strokeStyle = 'rgba(0, 229, 255, 0.8)';
+          ctx.strokeStyle = 'rgba(212, 248, 44, 0.85)';
           ctx.lineWidth = Math.max(1.5 * s, 1.2 * u);
           ctx.setLineDash([10 * s, 6 * s]);
           ctx.beginPath(); ctx.moveTo(ex0[0], ex0[1]); ctx.lineTo(ex1[0], ex1[1]); ctx.stroke();
@@ -193,7 +193,7 @@ export class Stage {
         } else if (this.points.length === 3) {
           const [p0, p1, p2] = this.points;
           ctx.save();
-          ctx.strokeStyle = 'rgba(0, 229, 255, 0.8)';
+          ctx.strokeStyle = 'rgba(212, 248, 44, 0.85)';
           ctx.lineWidth = Math.max(1.5 * s, 1.2 * u);
           ctx.setLineDash([10 * s, 6 * s]);
           ctx.beginPath();
@@ -201,11 +201,11 @@ export class Stage {
           ctx.stroke();
           // Dự đoán góc 4 theo hình bình hành phối cảnh
           const p3 = [p0[0] + p2[0] - p1[0], p0[1] + p2[1] - p1[1]];
-          ctx.strokeStyle = 'rgba(255, 196, 0, 0.75)';
+          ctx.strokeStyle = 'rgba(255, 196, 0, 0.8)';
           ctx.beginPath();
           ctx.moveTo(p2[0], p2[1]); ctx.lineTo(p3[0], p3[1]); ctx.lineTo(p0[0], p0[1]);
           ctx.stroke();
-          ctx.fillStyle = 'rgba(255, 196, 0, 0.2)';
+          ctx.fillStyle = 'rgba(255, 196, 0, 0.25)';
           ctx.beginPath(); ctx.arc(p3[0], p3[1], 12 * u, 0, Math.PI * 2); ctx.fill();
           ctx.beginPath(); ctx.arc(p3[0], p3[1], 12 * u, 0, Math.PI * 2); ctx.stroke();
           ctx.font = `bold ${Math.round(12 * u)}px "Be Vietnam Pro", sans-serif`;
@@ -214,12 +214,12 @@ export class Stage {
           ctx.restore();
         }
       }
-      ctx.font = `${Math.round(13 * u)}px "Be Vietnam Pro", sans-serif`;
+      ctx.font = `bold ${Math.round(13 * u)}px "Be Vietnam Pro", sans-serif`;
       const ord = orderCorners(this.points);   // corner names only once all 4 are set (click order is free)
       this.points.forEach(([x, y], i) => {
-        ctx.fillStyle = i === this.drag ? '#ffc400' : '#00E5FF'; ctx.strokeStyle = '#04121f'; ctx.lineWidth = 2 * u;
-        ctx.beginPath(); ctx.arc(x, y, 7 * u, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 3 * u;
+        ctx.fillStyle = i === this.drag ? '#FF5A36' : '#D4F82C'; ctx.strokeStyle = '#050810'; ctx.lineWidth = 2.5 * u;
+        ctx.beginPath(); ctx.arc(x, y, 7.5 * u, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3 * u;
         const label = ord.length === 4 ? t(`corner.${ord.indexOf(this.points[i])}`) : String(i + 1);
         ctx.strokeText(label, x + 10 * u, y - 9 * u); ctx.fillText(label, x + 10 * u, y - 9 * u);
       });
@@ -241,14 +241,14 @@ export class Stage {
         const [x1, y1, x2, y2] = this.dragBox;
         const rx = Math.min(x1, x2), ry = Math.min(y1, y2);
         const rw = Math.abs(x2 - x1), rh = Math.abs(y2 - y1);
-        ctx.fillStyle = 'rgba(0, 229, 255, 0.18)';
+        ctx.fillStyle = 'rgba(212, 248, 44, 0.2)';
         ctx.fillRect(rx, ry, rw, rh);
-        ctx.strokeStyle = '#00E5FF';
+        ctx.strokeStyle = '#D4F82C';
         ctx.lineWidth = Math.max(2.5 * s, 2);
         ctx.setLineDash([8 * s, 4 * s]);
         ctx.strokeRect(rx, ry, rw, rh);
         ctx.font = `bold ${Math.round(13 * s)}px "Be Vietnam Pro", sans-serif`;
-        ctx.fillStyle = '#00E5FF';
+        ctx.fillStyle = '#D4F82C';
         ctx.fillText(`🎯 ${Math.round(rw)} × ${Math.round(rh)} px`, rx + 4, ry - 6);
         ctx.restore();
       }
@@ -258,15 +258,15 @@ export class Stage {
     if (this.mode === 'assign' && this.manualAdd) {
       // Thanh thông báo hướng dẫn thêm thủ công nổi trên góc canvas
       ctx.save();
-      ctx.fillStyle = 'rgba(8, 16, 32, 0.88)';
-      ctx.strokeStyle = '#00E5FF';
+      ctx.fillStyle = 'rgba(7, 11, 18, 0.9)';
+      ctx.strokeStyle = '#D4F82C';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       if (typeof ctx.roundRect === 'function') ctx.roundRect(16, 16, 460, 36, 8);
       else ctx.rect(16, 16, 460, 36);
       ctx.fill(); ctx.stroke();
       ctx.font = 'bold 13px "Be Vietnam Pro", sans-serif';
-      ctx.fillStyle = '#00E5FF';
+      ctx.fillStyle = '#D4F82C';
       ctx.fillText('🎯 Kéo thả chuột để khoanh vùng người chơi trên video', 30, 39);
       ctx.restore();
     }
