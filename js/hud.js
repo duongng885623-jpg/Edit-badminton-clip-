@@ -477,8 +477,10 @@ export class HudRenderer {
     const pad = 22 * s, titleH = 38 * s;
     const [px0, py0, pw, ph] = this.rect('courtMap');
     const ox = px0 + pad, oy = py0 + titleH + pad;
+    const maxMx = this.court?.sport === 'tennis' ? 3.0 : 0.8;
+    const maxMy = this.court?.sport === 'tennis' ? 5.5 : 1.2;
     const toMap = (x, y) => {
-      x = Math.min(Math.max(x, -0.8), cW + 0.8); y = Math.min(Math.max(y, -0.8), cL + 0.8);
+      x = Math.min(Math.max(x, -maxMx), cW + maxMx); y = Math.min(Math.max(y, -maxMy), cL + maxMy);
       return side ? [ox + (y / cL) * mw, oy + (x / cW) * mh] : [ox + (x / cW) * mw, oy + (y / cL) * mh];
     };
     ctx.save();

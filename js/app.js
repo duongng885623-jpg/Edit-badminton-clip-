@@ -25,6 +25,16 @@ const state = {
 const stage = new Stage($('stage'), { onChange: onCourtChange });
 const layoutEd = new LayoutEditor($('out'), () => save());
 
+// Điều khiển tỷ lệ màn hình (Zoom & Pan Toolbar)
+$('btn-zoom-in')?.addEventListener('click', () => stage.zoomIn());
+$('btn-zoom-out')?.addEventListener('click', () => stage.zoomOut());
+$('btn-zoom-fit')?.addEventListener('click', () => stage.zoomFit());
+$('zoom-level')?.addEventListener('click', () => stage.zoomReset());
+stage.onZoomChange = z => {
+  const lbl = $('zoom-level');
+  if (lbl) lbl.textContent = `${Math.round(z * 100)}%`;
+};
+
 // ------------------------------------------------------------------ helpers
 const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 // status lines / stage title keep a text function so they re-translate when the language changes
@@ -80,15 +90,17 @@ function activate(step) {
   document.querySelector('.panel').scrollTop = 0;
   if (state.busy) return;
   setTitle(() => t(state.vid ? `title.${step}` : 'title.empty'));
-  if (step === 'render' && state.frame) { openLayout(); return; }   // step 4: drag / resize the HUD panels
+  if (step === 'render' && state.frame) { $('stage-zoom-bar')?.setAttribute('hidden', ''); openLayout(); return; }   // step 4: drag / resize the HUD panels
   layoutEd.close();
   if (state.frame) {
     $('stage').hidden = false; $('out').hidden = true;
+    $('stage-zoom-bar')?.removeAttribute('hidden');
     stage.setMode(step === 'players' ? 'assign' : 'calibrate');
   }
 }
 async function openLayout() {
   $('stage').hidden = true; $('out').hidden = false;
+  $('stage-zoom-bar')?.setAttribute('hidden', '');
   await state.fontsReady;
   await layoutEd.open(state.frame, state.cfg, stage.court());
   setTitle(() => t('title.layout'));
@@ -228,8 +240,8 @@ function playerFromDet(d, i, prev) {
   return {
     name: prev?.name ?? t('playerN', { n: i + 1 }),
     color: prev?.color ?? PALETTE[i % PALETTE.length],
-    team: prev?.team ?? team,
-    side: prev?.side ?? side,
+    team,
+    side,
     thumb: crop(state.frame, d.box, 'thumb'),
     avatar: crop(state.frame, d.box, 'avatar'),
     seed: d.court.map(v => +v.toFixed(3)), seedT: state.frameT, detIndex: i,
@@ -270,7 +282,7 @@ async function detectPlayersNow() {
     const dets = raw.filter(d => d.score >= minConf).map(d => {
       const f = footPoint(d), c = court.toCourt(f[0], f[1]);
       return { ...d, foot: f, court: c };
-    });
+    }).filter(d => d.court != null);
     const inCourt = dets.filter(d => court.inPlay(d.court));
 
     // Group candidates by court side
@@ -283,14 +295,18 @@ async function detectPlayersNow() {
       const distB = Math.hypot(b.court[0] - court.W / 2, b.court[1] - court.netY * 0.5);
       return (b.score * 2 - distA * 0.15) - (a.score * 2 - distB * 0.15);
     });
-    const bestFar = farDets.slice(0, 2).sort((a, b) => a.court[0] - b.court[0]);
 
     nearDets.sort((a, b) => {
       const distA = Math.hypot(a.court[0] - court.W / 2, a.court[1] - (court.netY + court.L) * 0.5);
       const distB = Math.hypot(b.court[0] - court.W / 2, b.court[1] - (court.netY + court.L) * 0.5);
       return (b.score * 2 - distA * 0.15) - (a.score * 2 - distB * 0.15);
     });
-    const bestNear = nearDets.slice(0, 2).sort((a, b) => a.court[0] - b.court[0]);
+
+    // Lựa chọn số lượng người chơi theo thể thức (đánh đơn 1-1 hoặc đánh đôi 2-2)
+    const isSingles = farDets.length === 1 && nearDets.length === 1;
+    const maxPerSide = isSingles ? 1 : 2;
+    const bestFar = farDets.slice(0, maxPerSide).sort((a, b) => a.court[0] - b.court[0]);
+    const bestNear = nearDets.slice(0, maxPerSide).sort((a, b) => a.court[0] - b.court[0]);
 
     // Active roster: Far players (Team A) first, then Near players (Team B)
     const chosen = bestFar.concat(bestNear);
@@ -308,7 +324,7 @@ async function detectPlayersNow() {
     });
     const prev = state.cfg.players;
     const match = prev.length === fresh.length ? matchCards(prev, fresh) : []; // same line-up → keep names/colors
-    state.cfg.players = fresh.map((p, i) => match[i] ? { ...p, name: match[i].name, color: match[i].color, team: match[i].team, side: match[i].side } : p);
+    state.cfg.players = fresh.map((p, i) => match[i] ? { ...p, name: match[i].name, color: match[i].color } : p);
     state.hl = state.cfg.players.length ? 0 : -1;
     save(); renderCards(); labelStage();
 
@@ -537,6 +553,7 @@ async function loadVideo(file) {
   $('pick-t').max = $('pick-n').max = v.duration;
   if ($('court-pick-t')) $('court-pick-t').max = $('court-pick-n').max = v.duration;
   $('empty').hidden = true;
+  $('stage-zoom-bar')?.removeAttribute('hidden');
   stage.points = orderCorners(loadCorners(v) || []);   // corners saved before auto-ordering may be in click order
   stage.orientation = state.cfg.court.orientation;
   const initT = v.duration > 2 ? 2.0 : (range().start || 0);
@@ -827,6 +844,7 @@ $('btn-render').onclick = async () => {
   activate('render');
   const out = $('out');
   $('stage').hidden = true; out.hidden = false;
+  $('stage-zoom-bar')?.setAttribute('hidden', '');
   setTitle(() => t('title.processing'));
   const onBeforeUnload = e => { e.preventDefault(); e.returnValue = ''; };
   window.addEventListener('beforeunload', onBeforeUnload);

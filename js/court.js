@@ -6,6 +6,9 @@ export const SPORT_CONFIGS = {
     name: 'Cầu lông (Badminton)',
     W: 6.1,
     L: 13.4,
+    marginM: 1.2,
+    marginSides: 1.2,
+    marginEnds: 1.5,
     shortService: 1.98,
     longServiceD: 0.76,
     singlesIn: 0.46,
@@ -33,6 +36,9 @@ export const SPORT_CONFIGS = {
     name: 'Pickleball',
     W: 6.10, // 20 feet
     L: 13.41, // 44 feet
+    marginM: 1.5,
+    marginSides: 1.2,
+    marginEnds: 1.8,
     kitchen: 2.13, // 7 feet Non-Volley Zone
     lines: (W, L) => {
       const netY = L / 2, k1 = netY - 2.13, k2 = netY + 2.13;
@@ -57,6 +63,9 @@ export const SPORT_CONFIGS = {
     name: 'Quần vợt (Tennis)',
     W: 10.97, // 36 feet doubles
     L: 23.77, // 78 feet
+    marginM: 5.5,
+    marginSides: 3.5, // 3.5m rộng ngoài biên dọc cho các pha cứu bóng góc hẹp
+    marginEnds: 6.5,  // 6.5m sâu sau vạch đáy baseline cho các pha đánh cuối sân
     singlesIn: 1.37, // 4.5 feet each side
     serviceDist: 6.40, // 21 feet from net
     lines: (W, L) => {
@@ -165,11 +174,12 @@ function invert3(m) {
 
 export function applyH(H, x, y) {
   const w = H[6] * x + H[7] * y + H[8];
+  if (w <= 1e-4) return null; // Điểm nằm trên/sau đường chân trời, không hợp lệ trong phép chiếu mặt sân
   return [(H[0] * x + H[1] * y + H[2]) / w, (H[3] * x + H[4] * y + H[5]) / w];
 }
 
 export class Court {
-  constructor(corners, orientation = 'behind', marginM = 1.2, sport = CURRENT_SPORT) {
+  constructor(corners, orientation = 'behind', marginM = null, sport = CURRENT_SPORT) {
     this.sport = sport;
     const cfg = getSportConfig(sport);
     this.W = cfg.W;
@@ -177,8 +187,13 @@ export class Court {
     this.netY = cfg.L / 2;
     this.corners = orderCorners(corners);
     this.orientation = orientation;
-    this.marginM = marginM ?? 1.2;
+
+    // Khoảng đệm riêng biệt theo từng môn (môn Tennis VĐV đánh lùi sâu sau vạch đáy và rộng 2 bên)
+    this.marginSides = cfg.marginSides ?? (marginM ?? cfg.marginM ?? 1.2);
+    this.marginEnds = cfg.marginEnds ?? (marginM ?? cfg.marginM ?? 1.2);
+    this.marginM = marginM ?? cfg.marginM ?? 1.2;
     this.margin = this.marginM;
+
     this.H = homography(this.corners, courtTargets(orientation, this.W, this.L)); // image -> court
     if (!this.H) throw new Error('Invalid court homography matrix');
     this.Hinv = invert3(this.H); // court -> image
@@ -186,17 +201,19 @@ export class Court {
   }
 
   toCourt(x, y) { return applyH(this.H, x, y); }
-  toImg(x, y) { return applyH(this.Hinv, x, y); }
-  toImage(x, y) { return applyH(this.Hinv, x, y); }
+  toImg(x, y) { return applyH(this.Hinv, x, y) || [NaN, NaN]; }
+  toImage(x, y) { return this.toImg(x, y); }
 
   inPlay(pt) {
-    if (!pt) return false;
-    const [x, y] = pt, m = this.marginM;
-    return x >= -m && x <= this.W + m && y >= -m && y <= this.L + m;
+    if (!pt || !Number.isFinite(pt[0]) || !Number.isFinite(pt[1])) return false;
+    const [x, y] = pt;
+    const ms = this.marginSides ?? this.marginM;
+    const me = this.marginEnds ?? this.marginM;
+    return x >= -ms && x <= this.W + ms && y >= -me && y <= this.L + me;
   }
 
   isFar(pt) {
-    if (!pt) return false;
+    if (!pt || !Number.isFinite(pt[1])) return false;
     return pt[1] < this.netY;
   }
 
@@ -218,8 +235,8 @@ export class Court {
   /** Đường dóng mô phỏng mở rộng ra ngoài mép sân để dễ canh chỉnh khi góc bị che khuất hoặc quay thiếu sân */
   drawExtendedGuidelines(ctx, lw = 2) {
     const W = this.W, L = this.L, netY = this.netY;
-    const extraY = Math.max(4, L * 0.4);
-    const extraX = Math.max(3, W * 0.45);
+    const extraY = Math.max(4, L * (this.sport === 'tennis' ? 0.35 : 0.4));
+    const extraX = Math.max(3, W * (this.sport === 'tennis' ? 0.35 : 0.45));
 
     ctx.save();
     // 1. Tia dóng kéo dài vô tận qua biên sân
@@ -268,12 +285,14 @@ export class Court {
    * baseline), detected near native resolution: far players are small after the downscale.
    */
   farTiles(W, H, size = 640, maxTiles = 4) {
-    const m = this.marginM, pts = [[-m, -m], [this.W + m, -m], [this.W + m, this.netY + 1], [-m, this.netY + 1]].map(p => this.toImg(...p));
+    const ms = this.marginSides ?? this.marginM;
+    const me = this.marginEnds ?? this.marginM;
+    const pts = [[-ms, -me], [this.W + ms, -me], [this.W + ms, this.netY + 1.2], [-ms, this.netY + 1.2]].map(p => this.toImg(...p));
     if (!pts.every(p => Number.isFinite(p[0]) && Number.isFinite(p[1]))) return [];
-    const tall = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]) / (this.W + 2 * m) * 2.4; // ~2.4 m in px at the far baseline
+    const tall = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]) / (this.W + 2 * ms) * (this.sport === 'tennis' ? 3.2 : 2.4);
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
     const x1 = 0, x2 = W;
-    const y1 = Math.max(0, Math.min(...ys) - tall), y2 = Math.min(H, Math.max(...ys) + tall * 0.2);
+    const y1 = Math.max(0, Math.min(...ys) - tall), y2 = Math.min(H, Math.max(...ys) + tall * 0.25);
     if (y2 - y1 < 16 || Math.max(...xs) < 0 || Math.min(...xs) > W) return [];
     const ov = Math.min(Math.max(tall * 0.5, 64), 200);
     const starts = (a, b, s) => {
@@ -293,8 +312,10 @@ export class Court {
   /**
    * Image polygon (convex hull) of the air above this court: floor + margin, lifted up to `height` m.
    */
-  airPolygon(height = 8, margin = 1.5) {
-    const m = margin, floor = [[-m, -m], [this.W + m, -m], [this.W + m, this.L + m], [-m, this.L + m]];
+  airPolygon(height = 10, margin = null) {
+    const ms = this.marginSides ?? (margin ?? 1.5);
+    const me = this.marginEnds ?? (margin ?? 1.5);
+    const floor = [[-ms, -me], [this.W + ms, -me], [this.W + ms, this.L + me], [-ms, this.L + me]];
     const pts = [];
     for (const [x, y] of floor) {
       const p = this.toImg(x, y), ax = this.toImg(x + 1, y), ay = this.toImg(x, y + 1);

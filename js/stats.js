@@ -56,12 +56,16 @@ export function playerMetrics(snaps, rallies, fps, maxSpeed = 7) {
       }
       snaps[f].spd[i] = held; snaps[f].top[i] = held === null ? null : top;
     }
-    let k = -1;
-    for (let f = 0; f < N; f++) {
-      while (k + 1 < spans.length && f >= spans[k + 1].start) k++;
-      if (k < 0) continue;
-      const stop = Math.min(f, spans[k].end);
-      snaps[f].rallyM[i] = Math.max(0, snaps[stop].dist[i] - snaps[spans[k].start].dist[i]);
+    if (!spans.length) {
+      for (let f = 0; f < N; f++) snaps[f].rallyM[i] = snaps[f].dist[i] || 0;
+    } else {
+      let k = -1;
+      for (let f = 0; f < N; f++) {
+        while (k + 1 < spans.length && f >= spans[k + 1].start) k++;
+        if (k < 0) continue;
+        const stop = Math.min(f, spans[k].end);
+        snaps[f].rallyM[i] = Math.max(0, snaps[stop].dist[i] - snaps[spans[k].start].dist[i]);
+      }
     }
     const dur = N > 1 ? snaps[N - 1].t - snaps[0].t : 0, dist = snaps[N - 1]?.dist[i] ?? 0;
     players.push({ distance: dist, avg: dur > 0 ? dist / dur : 0, top, seen: N ? seen / N : 0 });

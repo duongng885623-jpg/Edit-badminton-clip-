@@ -4,7 +4,6 @@ import { t } from './i18n.js';
 
 const MAX_PX = 2560 * 1440;   // display canvas cap: a 4K frame + border was ~16 M px (WebKit/iOS canvas memory limit)
 
-
 export class Stage {
   constructor(canvas, { onChange } = {}) {
     this.canvas = canvas;
@@ -19,26 +18,107 @@ export class Stage {
     this.labels = new Map();     // det index -> {name, color}
     this.onPickDet = null;
     this.onManualBox = null;
+    this.onZoomChange = null;
     this.drag = -1;
-    this.padPx = 0;
+    this._padX = 0;
+    this._padY = 0;
     this.k = 1;                  // canvas px per frame px (< 1 for big frames, see MAX_PX)
     this.showGuidelines = true;  // Tia dóng mô phỏng kéo dài
     this.manualAdd = false;      // Chế độ thêm thủ công
     this.dragBox = null;         // [x1, y1, x2, y2] khi đang kéo chuột khoanh vùng
 
+    // Tỷ lệ màn hình (Zoom & Pan)
+    this.zoom = 1.0;
+    this.panX = 0;
+    this.panY = 0;
+    this.isPanning = false;
+    this.panStartX = 0;
+    this.panStartY = 0;
+    this.spaceDown = false;
+
     canvas.addEventListener('pointerdown', e => this.down(e));
     canvas.addEventListener('pointermove', e => this.move(e));
     window.addEventListener('pointerup', e => this.up(e));
+
+    // Cuộn chuột để phóng to / thu nhỏ khung hình trực quan
+    canvas.addEventListener('wheel', e => {
+      e.preventDefault();
+      const rect = this.canvas.getBoundingClientRect();
+      const cx = e.clientX - rect.left - rect.width / 2;
+      const cy = e.clientY - rect.top - rect.height / 2;
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      this.setZoom(this.zoom * factor, cx, cy);
+    }, { passive: false });
+
+    // Giữ phím Cách (Space) để chuyển sang chế độ bàn tay kéo canvas (Pan)
+    window.addEventListener('keydown', e => {
+      if (e.code === 'Space' && !['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
+        this.spaceDown = true;
+        this.canvas.style.cursor = 'grab';
+      }
+    });
+    window.addEventListener('keyup', e => {
+      if (e.code === 'Space') {
+        this.spaceDown = false;
+        this.canvas.style.cursor = '';
+      }
+    });
+
+    // Nhấp đúp chuột để đặt lại tỷ lệ vừa màn hình
+    canvas.addEventListener('dblclick', () => {
+      this.zoomFit();
+    });
   }
 
-  get pad() { return this.mode === 'calibrate' ? this.padPx : 0; }
-  // border wide enough for off-frame corners; expanded to 0.55 (55%) for generous breathing space
+  get padX() { return this.mode === 'calibrate' ? (this._padX || 0) : 0; }
+  set padX(v) { this._padX = v; }
+  get padY() { return this.mode === 'calibrate' ? (this._padY || 0) : 0; }
+  set padY(v) { this._padY = v; }
+  get pad() { return Math.max(this.padX, this.padY); }
+
+  // Tự động tối ưu vùng đệm quanh video:
+  // Video dọc (9:16) giữ đệm ngang gọn (12%) để video hiển thị to rõ, không bị co nhỏ lọt thỏm.
   fitPad() {
     const f = this.frame;
     if (!f) return;
-    let need = 0.55 * Math.max(f.width, f.height);
-    for (const [x, y] of this.points) need = Math.max(need, -x, -y, x - f.width, y - f.height);
-    this.padPx = Math.round(need + 0.12 * f.height);
+    const isPortrait = f.height > f.width;
+    let needX = Math.round((isPortrait ? 0.12 : 0.16) * f.width);
+    let needY = Math.round((isPortrait ? 0.10 : 0.16) * f.height);
+    for (const [x, y] of this.points) {
+      if (x < 0) needX = Math.max(needX, Math.round(-x + 35));
+      if (x > f.width) needX = Math.max(needX, Math.round(x - f.width + 35));
+      if (y < 0) needY = Math.max(needY, Math.round(-y + 35));
+      if (y > f.height) needY = Math.max(needY, Math.round(y - f.height + 35));
+    }
+    this.padX = needX;
+    this.padY = needY;
+  }
+
+  // Điều khiển Tỷ lệ màn hình (Zoom & Pan)
+  setZoom(z, cx = 0, cy = 0) {
+    const oldZ = this.zoom;
+    const newZ = Math.min(Math.max(+z || 1, 0.4), 4.5);
+    if (Math.abs(newZ - oldZ) < 0.005) return;
+    if (cx !== 0 || cy !== 0) {
+      const factor = newZ / oldZ;
+      this.panX = cx - (cx - this.panX) * factor;
+      this.panY = cy - (cy - this.panY) * factor;
+    } else if (newZ === 1.0) {
+      this.panX = 0; this.panY = 0;
+    }
+    this.zoom = newZ;
+    this.applyTransform();
+  }
+
+  zoomIn() { this.setZoom(this.zoom * 1.25); }
+  zoomOut() { this.setZoom(this.zoom / 1.25); }
+  zoomReset() { this.setZoom(1.0); this.panX = 0; this.panY = 0; this.applyTransform(); }
+  zoomFit() { this.zoomReset(); }
+
+  applyTransform() {
+    this.canvas.style.transformOrigin = 'center center';
+    this.canvas.style.transform = `translate(${Math.round(this.panX)}px, ${Math.round(this.panY)}px) scale(${this.zoom.toFixed(3)})`;
+    this.onZoomChange?.(this.zoom);
   }
 
   setFrame(frame) {
@@ -51,7 +131,7 @@ export class Stage {
 
   toImage(e) {
     const r = this.canvas.getBoundingClientRect(), k = this.canvas.width / this.k / r.width;
-    return [(e.clientX - r.left) * k - this.pad, (e.clientY - r.top) * k - this.pad];
+    return [(e.clientX - r.left) * k - this.padX, (e.clientY - r.top) * k - this.padY];
   }
   // image px per CSS px, so handles stay the same on-screen size on a phone and a desktop
   unit() { const w = this.canvas.getBoundingClientRect().width; return w ? this.canvas.width / this.k / w : 1; }
@@ -59,6 +139,16 @@ export class Stage {
 
   down(e) {
     if (!this.frame) return;
+    // Nhấp chuột giữa (button 1) hoặc đang giữ phím Space: di chuyển camera (pan)
+    if (e.button === 1 || this.spaceDown) {
+      this.isPanning = true;
+      this.panStartX = e.clientX - this.panX;
+      this.panStartY = e.clientY - this.panY;
+      this.canvas.setPointerCapture(e.pointerId);
+      this.canvas.style.cursor = 'grabbing';
+      return;
+    }
+
     const [x, y] = this.toImage(e);
     if (this.mode === 'calibrate') {
       const i = this.points.findIndex(p => Math.hypot(p[0] - x, p[1] - y) < this.hitRadius(e));
@@ -92,6 +182,13 @@ export class Stage {
   }
 
   move(e) {
+    if (this.isPanning) {
+      this.panX = e.clientX - this.panStartX;
+      this.panY = e.clientY - this.panStartY;
+      this.applyTransform();
+      return;
+    }
+
     const [x, y] = this.toImage(e);
     if (this.mode === 'calibrate' && this.drag >= 0) {
       this.points[this.drag] = [x, y];
@@ -104,6 +201,12 @@ export class Stage {
   }
 
   up(e) {
+    if (this.isPanning) {
+      this.isPanning = false;
+      this.canvas.style.cursor = this.spaceDown ? 'grab' : '';
+      return;
+    }
+
     if (this.drag >= 0) {
       this.drag = -1;
       this.points = orderCorners(this.points); // any click order; saved as TL, TR, BR, BL
@@ -125,7 +228,7 @@ export class Stage {
         const bx1 = Math.max(0, Math.min(minX, f.width));
         const by1 = Math.max(0, Math.min(minY, f.height));
         const bx2 = Math.max(0, Math.min(maxX, f.width));
-        const by2 = Math.max(0, Math.min(maxY, f.height));
+        const by2 = Math.min(f.height, by1 + bh);
         if (bx2 - bx1 >= 10 && by2 - by1 >= 20) {
           finalBox = [bx1, by1, bx2, by2];
         }
@@ -151,13 +254,14 @@ export class Stage {
 
   court() {
     if (this.points.length !== 4) return null;
-    try { return new Court(this.points, this.orientation, 1.2, this.sport); } catch { return null; }
+    try { return new Court(this.points, this.orientation, null, this.sport); } catch { return null; }
   }
 
   draw() {
     const f = this.frame, ctx = this.ctx;
     if (!f) return;
-    const pad = this.pad, W = f.width + pad * 2, H = f.height + pad * 2;
+    const padX = this.padX, padY = this.padY;
+    const W = f.width + padX * 2, H = f.height + padY * 2;
     this.k = Math.min(1, Math.sqrt(MAX_PX / (W * H)));   // drawing stays in frame px, scaled down to the canvas
     const cw = Math.round(W * this.k), ch = Math.round(H * this.k);
     if (this.canvas.width !== cw || this.canvas.height !== ch) { this.canvas.width = cw; this.canvas.height = ch; }
@@ -165,11 +269,11 @@ export class Stage {
     ctx.fillStyle = '#050810'; ctx.fillRect(0, 0, W, H);
     // Draw subtle border guides around the real video frame
     ctx.strokeStyle = 'rgba(212, 248, 44, 0.35)'; ctx.lineWidth = Math.max(1, 1.5 * this.unit());
-    ctx.strokeRect(pad, pad, f.width, f.height);
-    ctx.drawImage(f, pad, pad);
+    ctx.strokeRect(padX, padY, f.width, f.height);
+    ctx.drawImage(f, padX, padY);
     const s = f.height / 720;
     ctx.save();
-    ctx.translate(pad, pad);
+    ctx.translate(padX, padY);
     if (this.mode === 'calibrate') {
       const court = this.court(), u = this.unit();
       if (court) {
@@ -276,7 +380,7 @@ export class Stage {
   drawLoupe([x, y]) {
     const ctx = this.ctx, u = this.unit(), D = 120 * u, zoom = 3, r = D / 2 / zoom, m = 8 * u;
     const CW = this.canvas.width / this.k;
-    const cx = x + this.pad < CW / 2 ? CW - m - D / 2 : m + D / 2, cy = m + D / 2;
+    const cx = x + this.padX < CW / 2 ? CW - m - D / 2 : m + D / 2, cy = m + D / 2;
     ctx.save();
     ctx.beginPath(); ctx.arc(cx, cy, D / 2, 0, Math.PI * 2); ctx.fillStyle = '#0b1220'; ctx.fill(); ctx.clip();
     ctx.drawImage(this.frame, x - r, y - r, 2 * r, 2 * r, cx - D / 2, cy - D / 2, D, D);   // raw frame: the dot would hide the target

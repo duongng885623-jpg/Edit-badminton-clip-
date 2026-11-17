@@ -361,7 +361,7 @@ input[type=checkbox]:checked::before {
 }
 .stage-body {
   flex: 1; display: flex; align-items: center; justify-content: center;
-  padding: 34px 28px; position: relative; min-height: 440px;
+  padding: 34px 28px; position: relative; min-height: 440px; overflow: hidden;
   background-image: radial-gradient(rgba(212, 248, 44, 0.07) 1px, transparent 1px);
   background-size: 24px 24px;
 }
@@ -371,6 +371,27 @@ input[type=checkbox]:checked::before {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 #stage { cursor: crosshair; }
+
+.stage-zoom-bar {
+  position: absolute; bottom: 18px; right: 24px; display: flex; align-items: center; gap: 4px;
+  background: rgba(14, 22, 40, 0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--line); border-radius: 9px; padding: 4px 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55); z-index: 25; user-select: none;
+}
+.zoom-btn {
+  background: transparent; border: none; color: var(--text); font-size: 16px; font-weight: 700;
+  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  border-radius: 6px; cursor: pointer; transition: all 0.15s ease; padding: 0; line-height: 1;
+}
+.zoom-btn:hover { background: rgba(212, 248, 44, 0.18); color: var(--primary); }
+.zoom-level-btn {
+  background: transparent; border: none; color: var(--muted); font-size: 12px; font-weight: 600;
+  padding: 3px 8px; min-width: 46px; cursor: pointer; border-radius: 5px; transition: all 0.15s ease; text-align: center;
+}
+.zoom-level-btn:hover { color: var(--primary); background: rgba(255, 255, 255, 0.06); }
+.zoom-btn.fit-btn {
+  width: auto; padding: 0 9px; font-size: 12px; font-weight: 600; color: var(--primary);
+}
 .empty { text-align: center; color: var(--muted); max-width: 340px; }
 .empty b { color: var(--text); font-weight: 600; }
 .empty-mark {
