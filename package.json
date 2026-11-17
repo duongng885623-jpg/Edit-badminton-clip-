@@ -1,0 +1,10 @@
+{
+  "name": "sports-hud-ai",
+  "version": "1.0.0",
+  "description": "Sports HUD AI Studio",
+  "type": "module",
+  "scripts": {
+    "test": "node test/regression.test.js",
+    "start": "node server.js"
+  }
+}

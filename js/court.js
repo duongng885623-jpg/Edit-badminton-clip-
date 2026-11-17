@@ -173,6 +173,7 @@ function invert3(m) {
 }
 
 export function applyH(H, x, y) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
   const w = H[6] * x + H[7] * y + H[8];
   if (Math.abs(w) < 1e-9) return null;
   return [(H[0] * x + H[1] * y + H[2]) / w, (H[3] * x + H[4] * y + H[5]) / w];
