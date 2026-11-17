@@ -8,3 +8,5 @@ test_*.png
 test_*.jpg
 .DS_Store
 Thumbs.db
+.agents/
+.gemini/
