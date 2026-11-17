@@ -234,7 +234,9 @@ function labelStage() {
 
 function playerFromDet(d, i, prev) {
   const court = stage.court();
-  const isFar = court ? court.isFar(d.court) : (d.court[1] < 6.7);
+  const rawCourt = (d.court && Number.isFinite(d.court[0]) && Number.isFinite(d.court[1])) ? d.court : null;
+  const cPt = rawCourt || (court && d.foot ? court.toCourt(d.foot[0], d.foot[1]) : null) || [3.0, 6.7];
+  const isFar = court ? court.isFar(cPt) : (cPt[1] < 6.7);
   const side = isFar ? 'far' : 'near';
   const team = isFar ? 'A' : 'B';
   return {
@@ -244,7 +246,7 @@ function playerFromDet(d, i, prev) {
     side,
     thumb: crop(state.frame, d.box, 'thumb'),
     avatar: crop(state.frame, d.box, 'avatar'),
-    seed: d.court.map(v => +v.toFixed(3)), seedT: state.frameT, detIndex: i,
+    seed: cPt.map(v => +v.toFixed(3)), seedT: state.frameT, detIndex: i,
     hist: Array.from(torsoHist(state.frame.getContext('2d'), d.box) || []).map(v => +v.toFixed(4)),
   };
 }
@@ -282,8 +284,8 @@ async function detectPlayersNow() {
     const dets = raw.filter(d => d.score >= minConf).map(d => {
       const f = footPoint(d), c = court.toCourt(f[0], f[1]);
       return { ...d, foot: f, court: c };
-    }).filter(d => d.court != null);
-    const inCourt = dets.filter(d => court.inPlay(d.court));
+    });
+    const inCourt = dets.filter(d => d.court && court.inPlay(d.court));
 
     // Group candidates by court side
     const farDets = inCourt.filter(d => court.isFar(d.court));
@@ -309,7 +311,11 @@ async function detectPlayersNow() {
     const bestNear = nearDets.slice(0, maxPerSide).sort((a, b) => a.court[0] - b.court[0]);
 
     // Active roster: Far players (Team A) first, then Near players (Team B)
-    const chosen = bestFar.concat(bestNear);
+    let chosen = bestFar.concat(bestNear);
+    if (!chosen.length && dets.length > 0) {
+      // Fallback nếu biên sân chưa khớp hoàn hảo: chọn các phát hiện có điểm tin cậy cao nhất
+      chosen = [...dets].sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 4);
+    }
 
     // Outsiders / spectators remain clickable on canvas but NOT added to cfg.players
     state.dets = chosen.concat(dets.filter(d => !chosen.includes(d)));
