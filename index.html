@@ -33,6 +33,7 @@
     </nav>
     <div class="sub" data-i18n="sub"></div>
     <div class="badges">
+      <button type="button" class="topbar-coffee-btn" id="btn-topbar-donate" data-i18n="donate.btn">☕ Ủng hộ tác giả</button>
       <span id="badge-gpu" class="badge" data-i18n="badge.checking"></span>
       <div class="lang" role="group" aria-label="Language"><button class="ghost" data-lang="vi">VI</button><button class="ghost" data-lang="en">EN</button></div>
     </div>
@@ -46,7 +47,7 @@
         <p class="lead" data-i18n="home.lead"></p>
         <div class="cta">
           <a class="button primary" href="#/app" data-i18n="home.start"></a>
-          <a class="button coffee" href="https://buymeacoffee.com/gob123th" rel="noopener" target="_blank" data-i18n="support.button"></a>
+          <button type="button" class="button coffee" id="btn-hero-donate" data-i18n="donate.btn">☕ Ủng hộ tác giả</button>
         </div>
         <p class="hint" data-i18n="home.needs"></p>
       </div>
@@ -139,7 +140,7 @@
         <h2 data-i18n="support.title"></h2>
         <p data-i18n="support.text"></p>
       </div>
-      <a class="button coffee" href="https://buymeacoffee.com/gob123th" rel="noopener" target="_blank" data-i18n="support.button"></a>
+      <button type="button" class="button coffee" id="btn-band-donate" data-i18n="donate.btn">☕ Ủng hộ tác giả</button>
     </section>
   </main>
 
@@ -465,6 +466,61 @@
         </div>
         <div id="downloads" class="row"></div>
         <div id="report" class="report" hidden></div>
+
+        <!-- BẢNG ĐÁNH GIÁ FEEDBACK TỪ NGƯỜI DÙNG SAU KHI RENDER XONG -->
+        <div id="feedback-card" class="feedback-card" hidden>
+          <div class="feedback-head">
+            <span class="feedback-pill">FEEDBACK</span>
+            <h3 data-i18n="feedback.cardTitle">ĐÁNH GIÁ CHẤT LƯỢNG VIDEO VỪA XUẤT</h3>
+            <p class="feedback-sub" data-i18n="feedback.cardSub">Phản hồi của bạn giúp chúng tôi cải thiện độ chuẩn xác của AI và tốc độ xử lý</p>
+          </div>
+          
+          <div class="feedback-group">
+            <span class="feedback-label" data-i18n="feedback.rateLabel">Mức độ hài lòng của bạn:</span>
+            <div class="star-rating" id="star-rating">
+              <button type="button" class="star-btn" data-val="1">★</button>
+              <button type="button" class="star-btn" data-val="2">★</button>
+              <button type="button" class="star-btn" data-val="3">★</button>
+              <button type="button" class="star-btn" data-val="4">★</button>
+              <button type="button" class="star-btn active" data-val="5">★</button>
+            </div>
+            <span id="star-desc" class="star-desc">🤩 Tuyệt vời</span>
+          </div>
+
+          <div class="feedback-group">
+            <span class="feedback-label" data-i18n="feedback.tagsLabel">Điểm nổi bật hoặc vấn đề gặp phải:</span>
+            <div class="feedback-tags" id="feedback-tags">
+              <button type="button" class="tag-chip active" data-tag="court_perfect" data-i18n="feedback.tag1">🏸 Vạch sân rất chuẩn</button>
+              <button type="button" class="tag-chip active" data-tag="fast_render" data-i18n="feedback.tag2">⚡ Render nhanh & mượt</button>
+              <button type="button" class="tag-chip" data-tag="track_good" data-i18n="feedback.tag3">👥 Bám bắt VĐV tốt</button>
+              <button type="button" class="tag-chip" data-tag="hud_nice" data-i18n="feedback.tag4">📊 HUD & Minimap đẹp</button>
+              <button type="button" class="tag-chip" data-tag="court_skew" data-i18n="feedback.tag5">⚠️ Bị lệch vạch sân</button>
+              <button type="button" class="tag-chip" data-tag="player_wrong" data-i18n="feedback.tag6">⚠️ Nhận diện nhầm người</button>
+              <button type="button" class="tag-chip" data-tag="feature_request" data-i18n="feedback.tag7">💡 Góp ý tính năng mới</button>
+            </div>
+          </div>
+
+          <div class="feedback-group">
+            <textarea id="feedback-text" rows="3" placeholder="Chia sẻ thêm cảm nhận, góp ý tính năng hoặc góc máy video bạn vừa thực hiện..."></textarea>
+          </div>
+
+          <div class="feedback-actions">
+            <button type="button" class="primary" id="btn-submit-feedback">
+              <span>🚀 Gửi đánh giá</span>
+            </button>
+            <button type="button" class="ghost" id="btn-export-feedback" title="Tải file lịch sử đánh giá">
+              <span>📥 Xuất file log</span>
+            </button>
+          </div>
+
+          <div id="feedback-thanks-box" class="feedback-thanks" hidden>
+            <div class="thanks-icon">🎉</div>
+            <div class="thanks-text" data-i18n="feedback.thanks">Cảm ơn bạn rất nhiều! Đánh giá đã được ghi nhận.</div>
+            <button type="button" class="button coffee" id="btn-thanks-donate" style="margin-top: 10px; width: 100%;">
+              ☕ Mời tác giả cốc cà phê qua VietQR
+            </button>
+          </div>
+        </div>
         <div class="step-nav">
           <button class="ghost" data-go="players" data-i18n="nav.back"></button>
         </div>
@@ -496,9 +552,57 @@
     <span data-i18n="foot.local"></span>
     <a href="#/privacy" data-i18n="menu.privacy"></a>
     <a href="https://github.com/duongng885623-jpg/Edit-badminton-clip-" rel="noopener" target="_blank">GitHub</a>
-    <a href="https://buymeacoffee.com/gob123th" rel="noopener" target="_blank">Buy Me a Coffee</a>
+    <a href="javascript:void(0)" id="foot-donate-link" data-i18n="donate.btn">☕ Ủng hộ tác giả (VietQR)</a>
   </footer>
   <div id="toast" class="toast" hidden></div>
+
+  <!-- MODAL DONATE VIETQR (THAY THẾ BUY ME A COFFEE) -->
+  <div id="modal-donate" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <button type="button" class="modal-close" id="btn-close-donate" title="Đóng">✕</button>
+      <div class="modal-head">
+        <span class="modal-tag">VIETQR · NAPAS 247</span>
+        <h2 data-i18n="donate.title">ỦNG HỘ TÁC GIẢ (BUY ME A COFFEE)</h2>
+        <p class="modal-desc" data-i18n="donate.desc">Quét mã VietQR bằng app ngân hàng bất kỳ để ủng hộ tác giả tiếp tục phát triển Sports HUD AI hoàn toàn miễn phí!</p>
+      </div>
+
+      <div class="modal-qr-body">
+        <div class="qr-frame">
+          <img src="assets/vietqr-clean.png" onerror="this.src='assets/vietqr-duong.jpg'" alt="VietQR NGUYEN DUC DUONG VIB 023041" class="qr-img" id="qr-img-display">
+          <div class="qr-caption">VietQR Pay · napas 247 Chuyển nhanh 24/7</div>
+        </div>
+
+        <div class="bank-info-box">
+          <div class="bank-field">
+            <span class="bank-lbl">Ngân hàng thụ hưởng</span>
+            <span class="bank-val b-highlight">VIB (Ngân hàng TMCP Quốc Tế)</span>
+          </div>
+          <div class="bank-field">
+            <span class="bank-lbl">Số tài khoản</span>
+            <div class="copy-row">
+              <span class="bank-val stk" id="stk-val">023041</span>
+              <button type="button" class="copy-action-btn" id="btn-copy-stk" title="Sao chép số tài khoản">📋 Sao chép</button>
+            </div>
+          </div>
+          <div class="bank-field">
+            <span class="bank-lbl">Chủ tài khoản</span>
+            <span class="bank-val b-holder">NGUYỄN ĐỨC DƯƠNG</span>
+          </div>
+          <div class="bank-field">
+            <span class="bank-lbl">Nội dung chuyển khoản</span>
+            <div class="copy-row">
+              <span class="bank-val memo" id="memo-val">Ung ho Sports HUD AI</span>
+              <button type="button" class="copy-action-btn" id="btn-copy-memo" title="Sao chép nội dung">📋 Sao chép</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <span class="pulse-heart">❤️</span> <span data-i18n="donate.thanks">Cảm ơn sự đồng hành và tiếp lửa của bạn rất nhiều!</span>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
 

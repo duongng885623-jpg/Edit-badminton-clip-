@@ -846,6 +846,7 @@ $('btn-render').onclick = async () => {
   layoutEd.close();
   state.busy = true; state.abort = new AbortController();
   $('btn-render').disabled = true; $('btn-cancel').disabled = false; $('downloads').innerHTML = '';
+  const fcInit = $('feedback-card'); if (fcInit) fcInit.hidden = true;
   state.result = null; showReport();
   activate('render');
   const out = $('out');
@@ -887,6 +888,7 @@ $('btn-render').onclick = async () => {
     setTitle(() => t('title.result'));
     window.__lastResult = state.result = res;
     showReport();
+    showFeedbackSection();
     toast(t('doneToast'));
   } catch (e) {
     console.error(e);
@@ -898,6 +900,158 @@ $('btn-render').onclick = async () => {
   }
 };
 $('btn-cancel').onclick = () => state.abort?.abort();
+
+// ------------------------------------------------------------------ donate modal (VietQR)
+function initDonateModal() {
+  const modal = $('modal-donate');
+  if (!modal) return;
+  const openModal = (e) => {
+    if (e) e.preventDefault();
+    modal.hidden = false;
+  };
+  const closeModal = (e) => {
+    if (e) e.preventDefault();
+    modal.hidden = true;
+  };
+
+  ['btn-topbar-donate', 'btn-hero-donate', 'btn-band-donate', 'foot-donate-link', 'btn-thanks-donate'].forEach(id => {
+    const el = $(id);
+    if (el) el.onclick = openModal;
+  });
+
+  const btnClose = $('btn-close-donate');
+  if (btnClose) btnClose.onclick = closeModal;
+  modal.onclick = (e) => {
+    if (e.target === modal) closeModal();
+  };
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modal.hidden) closeModal();
+  });
+
+  const copyText = async (text, msg) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(msg);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      toast(msg);
+    }
+  };
+
+  const btnCopyStk = $('btn-copy-stk');
+  if (btnCopyStk) {
+    btnCopyStk.onclick = () => copyText('023041', t('donate.copied'));
+  }
+
+  const btnCopyMemo = $('btn-copy-memo');
+  if (btnCopyMemo) {
+    btnCopyMemo.onclick = () => copyText('Ung ho Sports HUD AI', t('donate.copiedContent'));
+  }
+}
+
+// ------------------------------------------------------------------ feedback module
+function showFeedbackSection() {
+  const card = $('feedback-card');
+  if (!card) return;
+  card.hidden = false;
+  $('feedback-thanks-box').hidden = true;
+  try {
+    const stored = JSON.parse(localStorage.getItem('sports_hud_feedbacks') || '[]');
+    const btnExport = $('btn-export-feedback');
+    if (btnExport) btnExport.style.display = stored.length > 0 ? 'inline-flex' : 'none';
+  } catch {}
+}
+
+function initFeedbackModule() {
+  let currentRating = 5;
+  const starDesc = $('star-desc');
+  const getRatingDesc = (val) => {
+    const map = {
+      1: '😡 ' + t('feedback.r1'),
+      2: '🙁 ' + t('feedback.r2'),
+      3: '😐 ' + t('feedback.r3'),
+      4: '🙂 ' + t('feedback.r4'),
+      5: '🤩 ' + t('feedback.r5'),
+    };
+    return map[val] || '🤩 Tuyệt vời';
+  };
+
+  const updateStars = (val) => {
+    currentRating = val;
+    document.querySelectorAll('#star-rating .star-btn').forEach(btn => {
+      const bval = parseInt(btn.dataset.val, 10);
+      btn.classList.toggle('active', bval <= val);
+    });
+    if (starDesc) starDesc.textContent = getRatingDesc(val);
+  };
+
+  document.querySelectorAll('#star-rating .star-btn').forEach(btn => {
+    btn.onclick = () => updateStars(parseInt(btn.dataset.val, 10));
+  });
+
+  document.querySelectorAll('#feedback-tags .tag-chip').forEach(chip => {
+    chip.onclick = () => chip.classList.toggle('active');
+  });
+
+  const btnSubmit = $('btn-submit-feedback');
+  if (btnSubmit) {
+    btnSubmit.onclick = () => {
+      const selectedTags = Array.from(document.querySelectorAll('#feedback-tags .tag-chip.active')).map(c => c.textContent.trim());
+      const comment = ($('feedback-text')?.value || '').trim();
+      const feedbackItem = {
+        id: 'fb_' + Date.now(),
+        time: new Date().toISOString(),
+        rating: currentRating,
+        tags: selectedTags,
+        comment,
+        sport: state.cfg.sport || 'badminton',
+        videoName: state.vid?.file?.name || 'video_clip',
+        durationSec: state.vid?.dur || 0,
+      };
+
+      try {
+        const stored = JSON.parse(localStorage.getItem('sports_hud_feedbacks') || '[]');
+        stored.push(feedbackItem);
+        localStorage.setItem('sports_hud_feedbacks', JSON.stringify(stored));
+      } catch (err) {
+        console.warn('Could not save feedback to localStorage', err);
+      }
+
+      $('feedback-thanks-box').hidden = false;
+      const btnExport = $('btn-export-feedback');
+      if (btnExport) btnExport.style.display = 'inline-flex';
+      toast(t('feedback.thanks'));
+    };
+  }
+
+  const btnExport = $('btn-export-feedback');
+  if (btnExport) {
+    btnExport.onclick = () => {
+      const stored = localStorage.getItem('sports_hud_feedbacks') || '[]';
+      const blob = new Blob([stored], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `sports_hud_feedback_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+  }
+
+  const btnThanksDonate = $('btn-thanks-donate');
+  if (btnThanksDonate) {
+    btnThanksDonate.onclick = () => {
+      const modal = $('modal-donate');
+      if (modal) modal.hidden = false;
+    };
+  }
+}
 
 // ------------------------------------------------------------------ language
 const syncLangButtons = () => document.querySelectorAll('[data-lang]').forEach(b => b.classList.toggle('on', b.dataset.lang === getLang()));
@@ -914,6 +1068,8 @@ applyI18n(); syncLangButtons();
 initPages(t);
 syncControls();
 renderCards();
+initDonateModal();
+initFeedbackModule();
 activate('video');
 state.fontsReady = loadFonts().catch(e => toast(t('fontErr', { msg: e.message })));
 window.__app = { state, stage, loadVideo, detectPlayers };
