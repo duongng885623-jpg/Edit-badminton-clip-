@@ -1,6 +1,8 @@
 ﻿// Map ByteTrack tracks to configured players: known IDs first (with jump check), then court-distance matching.
 import { COURT_L, COURT_W, NET_Y } from './court.js';
 
+const L_HIP = 11, R_HIP = 12;
+const L_KNEE = 13, R_KNEE = 14;
 const L_ANKLE = 15, R_ANKLE = 16;
 
 function iou(a, b) {
@@ -46,14 +48,86 @@ export const similarity = (a, b) => { let s = 0; for (let k = 0; k < 16; k++) s 
 
 export function footPoint(det) {
   const [x1, y1, x2, y2] = det.box;
-  let foot = [(x1 + x2) / 2, y2];
+  const boxH = Math.max(1, y2 - y1);
+  const k = det.kps;
+  if (!k) return [(x1 + x2) / 2, y2];
+
+  // 1. Mắt cá chân (Ankles) với độ nhạy cao (> 0.20)
+  const xs = [], ys = [];
+  for (const j of [L_ANKLE, R_ANKLE]) {
+    if (k[j * 3 + 2] > 0.20) {
+      xs.push(k[j * 3]);
+      ys.push(k[j * 3 + 1]);
+    }
+  }
+  if (xs.length > 0) {
+    const avgX = xs.reduce((a, b) => a + b, 0) / xs.length;
+    // Điểm sàn dưới mắt cá chân ~2% chiều cao cơ thể
+    const footY = Math.max(...ys) + 0.02 * boxH;
+    return [avgX, Math.min(Math.max(footY, y1 + 0.5 * boxH), y2 + 0.04 * boxH)];
+  }
+
+  // 2. Suy luận sinh trắc học khi mắt cá chân bị mờ/che khuất: sử dụng khớp gối & hông
+  const kneeXs = [], kneeYs = [];
+  for (const j of [L_KNEE, R_KNEE]) {
+    if (k[j * 3 + 2] > 0.20) {
+      kneeXs.push(k[j * 3]);
+      kneeYs.push(k[j * 3 + 1]);
+    }
+  }
+  const hipYs = [];
+  for (const j of [L_HIP, R_HIP]) {
+    if (k[j * 3 + 2] > 0.20) hipYs.push(k[j * 3 + 1]);
+  }
+
+  if (kneeYs.length > 0 && hipYs.length > 0) {
+    const avgKneeY = kneeYs.reduce((a, b) => a + b, 0) / kneeYs.length;
+    const avgHipY = hipYs.reduce((a, b) => a + b, 0) / hipYs.length;
+    const legH = avgKneeY - avgHipY;
+    if (legH > 0.12 * boxH) {
+      // Chiều dài từ gối xuống bàn chân xấp xỉ chiều dài từ hông xuống gối
+      const estFootY = avgKneeY + legH * 0.95;
+      const avgKneeX = kneeXs.reduce((a, b) => a + b, 0) / kneeXs.length;
+      return [avgKneeX, Math.max(y2, estFootY)];
+    }
+  }
+
+  // 3. Fallback: tâm đáy bounding box
+  return [(x1 + x2) / 2, y2];
+}
+
+/**
+ * Nhận diện khán giả/trọng tài ngồi ghế ngoài đường biên sân để loại bỏ khỏi tracking.
+ * VĐV đang thi đấu luôn ở tư thế đứng/di chuyển có tỷ lệ thân h/w >= 1.5,
+ * trong khi người ngồi ghế bị nén dọc (h/w < 1.38) và không có khớp chân đứng thẳng.
+ */
+export function isSeatedSpectator(det, court) {
+  if (!det || !det.box) return false;
+  const [x1, y1, x2, y2] = det.box;
+  const w = Math.max(1, x2 - x1), h = Math.max(1, y2 - y1);
+  const aspect = h / w;
+
+  const courtPos = det.court || (court && court.toCourt(det.foot?.[0] ?? (x1 + x2) / 2, det.foot?.[1] ?? y2));
+  if (!courtPos) return true;
+
+  const cW = court?.W || COURT_W, cL = court?.L || COURT_L;
+  const isOutside = courtPos[0] < -0.1 || courtPos[0] > cW + 0.1 || courtPos[1] < -0.1 || courtPos[1] > cL + 0.1;
+  if (!isOutside) return false; // Nằm trong vạch sân không bao giờ là khán giả ngồi
+
+  const isTennis = court?.sport === 'tennis';
+
+  // 1. Tỷ lệ thân người ngồi ghế (hình vuông hoặc bè ngang)
+  if (aspect < (isTennis ? 1.25 : 1.38)) return true;
+
+  // 2. Kiểm tra pose: nếu có keypoints, người ngồi không có mắt cá chân duỗi thẳng
   const k = det.kps;
   if (k) {
-    const xs = [], ys = [];
-    for (const j of [L_ANKLE, R_ANKLE]) if (k[j * 3 + 2] > 0.35) { xs.push(k[j * 3]); ys.push(k[j * 3 + 1]); }
-    if (xs.length) foot = [xs.reduce((a, b) => a + b) / xs.length, Math.min(Math.max(...ys) + 0.02 * (y2 - y1), y2)];
+    const ankleMax = Math.max(k[L_ANKLE * 3 + 2] || 0, k[R_ANKLE * 3 + 2] || 0);
+    const kneeMax = Math.max(k[L_KNEE * 3 + 2] || 0, k[R_KNEE * 3 + 2] || 0);
+    if (ankleMax < 0.25 && kneeMax < 0.35 && aspect < 1.60) return true;
   }
-  return foot;
+
+  return false;
 }
 
 export function defaultAnchors(players, court = null) {
@@ -116,22 +190,46 @@ export class PlayerTracker {
     const netY = this.court?.netY || NET_Y;
     return p.half === 0 ? d.court[1] < netY + NET_SLACK : d.court[1] > netY - NET_SLACK;
   }
-  sim(p, d) { return p.appN >= APP_LEARN && d.hist ? similarity(p.app, d.hist) : null; }
+  getApp(p) {
+    if (p.app) return p.app;
+    if (p.appN >= 10 && p.appSum) return p.appSum.map(v => v / p.appN);
+    return null;
+  }
+
+  sim(p, d) {
+    const app = this.getApp(p);
+    return app && d.hist ? similarity(app, d.hist) : null;
+  }
 
   /** Chỉ dựa vào màu áo nếu 2 người chơi cùng sân mặc đồ khác màu rõ rệt */
   hasDistinctShirts(p) {
-    if (p.appN < APP_LEARN || !p.app) return false;
-    const partner = this.players.find(o => o.idx !== p.idx && o.half === p.half && o.appN >= APP_LEARN && o.app);
+    const appP = this.getApp(p);
+    if (!appP) return false;
+    const partner = this.players.find(o => o.idx !== p.idx && o.half === p.half && this.getApp(o));
     if (!partner) return false;
-    return similarity(p.app, partner.app) < 0.78;
+    return similarity(appP, this.getApp(partner)) < 0.78;
   }
 
-  /** true when d clearly wears a same-side partner's shirt rather than p's */
+  /** true when d clearly does not match p: either looks much more like partner or totally unlike p's shirt */
   vetoed(p, d) {
-    if (!this.hasDistinctShirts(p)) return false; // Không phạt nếu mặc đồ cùng màu
     const mine = this.sim(p, d);
     if (mine === null) return false;
-    return this.players.some(q => q !== p && q.half === p.half && (this.sim(q, d) ?? -1) > mine + APP_VETO);
+
+    // 1. Phạt nếu ứng viên có màu áo hoàn toàn khác biệt với VĐV (đã xác định từ đầu hoặc đã học)
+    // Ví dụ VĐV mặc áo xanh đậm, còn ứng viên là khán giả mặc áo trắng/vàng/đỏ (mine < 0.28)
+    if ((p.app || p.appN >= 15) && mine < 0.28) {
+      return true;
+    }
+
+    // 2. Đánh đôi: nếu đồng đội cùng sân mặc đồ khác màu rõ rệt và ứng viên d giống đồng đội hơn
+    if (this.hasDistinctShirts(p)) {
+      const partner = this.players.find(q => q !== p && q.half === p.half && this.getApp(q));
+      if (partner) {
+        const partSim = this.sim(partner, d);
+        if (partSim !== null && partSim > mine + APP_VETO) return true;
+      }
+    }
+    return false;
   }
 
   cost(p, d, t) {
@@ -145,10 +243,11 @@ export class PlayerTracker {
       const hRatio = Math.max(h0, h1) / Math.max(1, Math.min(h0, h1));
       if (hRatio > 2.0) c += 1.8;
     }
-    // Chỉ bổ sung màu áo nếu người chơi có trang phục phân biệt
-    if (this.hasDistinctShirts(p)) {
-      const s = this.sim(p, d);
-      if (s !== null) c += 4.0 * (1 - s);
+    // So khớp màu áo (cả đánh đơn và đánh đôi có phân biệt áo)
+    const s = this.sim(p, d);
+    if (s !== null) {
+      if (s < 0.40) c += 5.0 * (1 - s); // Phạt nặng nếu màu áo khác biệt
+      else if (s > 0.75) c *= 0.85; // Ưu tiên ứng viên có màu áo trùng khớp cao
     }
     return c;
   }
@@ -158,7 +257,13 @@ export class PlayerTracker {
     const dets = [];
     for (const d of tracks) {
       const foot = footPoint(d), court = this.court.toCourt(foot[0], foot[1]);
-      if (court && this.court.inPlay(court)) dets.push({ ...d, foot, court, hist: frameCtx ? torsoHist(frameCtx, d.box) : null });
+      if (court && this.court.inPlay(court)) {
+        const hist = d.hist || (frameCtx ? torsoHist(frameCtx, d.box) : null);
+        const cand = { ...d, foot, court, hist };
+        if (!isSeatedSpectator(cand, this.court)) {
+          dets.push(cand);
+        }
+      }
     }
     this.lastDets = dets;
     const assigned = new Map(), used = new Set();
@@ -170,7 +275,9 @@ export class PlayerTracker {
       if (pi === undefined) return;
       const p = this.players[pi];
       const dd = p.everSeen ? dist(d.court, this.predPos(p, t)) : 0;
-      const ok = this.onSide(p, d) && (!p.everSeen || dd <= this.gate(p, t)) && !this.vetoed(p, d);
+      const s = this.sim(p, d);
+      const shirtMismatch = s !== null && s < 0.25;
+      const ok = this.onSide(p, d) && (!p.everSeen || dd <= this.gate(p, t)) && !this.vetoed(p, d) && !shirtMismatch;
       if (!ok) { this.owner.delete(d.tid); return; }
       if (!cands.has(pi) || dd < cands.get(pi)[0]) cands.set(pi, [dd, di]);
     });
@@ -309,7 +416,15 @@ export function interpolateBetween(snaps, boxes, stride) {
           p.seen = pa.seen || pb.seen;
         }
         if (pa.head && pb?.head) p.head = lerp(pa.head, pb.head, f);
-        if (pa.kps && pb?.kps) p.kps = Array.from(pa.kps, (v, k) => v + (pb.kps[k] - v) * f);
+        if (pa.kps && pb?.kps) {
+          const courtJump = pa.pos && pb?.pos ? Math.hypot(pa.pos[0] - pb.pos[0], pa.pos[1] - pb.pos[1]) : 0;
+          const headJump = pa.head && pb?.head ? Math.hypot(pa.head[0] - pb.head[0], pa.head[1] - pb.head[1]) : 0;
+          if (courtJump <= 2.2 && headJump <= 120) {
+            p.kps = Array.from(pa.kps, (v, k) => v + (pb.kps[k] - v) * f);
+          } else {
+            p.kps = f < 0.5 ? pa.kps : pb.kps;
+          }
+        }
         if (snaps[a].dist && snaps[b].dist) {
           snaps[i].dist[pi] = snaps[a].dist[pi] + (snaps[b].dist[pi] - snaps[a].dist[pi]) * f;
         }

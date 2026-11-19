@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict';
 import { Court, orderCorners, courtLines, applyH, SPORT_CONFIGS } from '../js/court.js';
-import { PlayerTracker, interpolateBetween, footPoint, defaultAnchors } from '../js/players.js';
+import { PlayerTracker, interpolateBetween, footPoint, defaultAnchors, isSeatedSpectator } from '../js/players.js';
 import { StatsTracker, playerMetrics, trailsAt } from '../js/stats.js';
 
 let passed = 0;
@@ -264,6 +264,100 @@ async function runAll() {
     assert.ok(Math.abs(mid.pos[0] - 3.0) < 1e-3, 'Intermediate position must be linearly interpolated to 3.0');
     assert.ok(Math.abs(snaps[1].dist[0] - 1.0) < 1e-3, 'Intermediate distance must be linearly interpolated to 1.0');
     assert.ok(Math.abs(snaps[1].sta[0] - 99.0) < 1e-3, 'Intermediate stamina must be interpolated to 99.0');
+  });
+
+  test('footPoint: biomechanical extrapolation places foot on floor when ankles are occluded', () => {
+    // Player detection where ankles are missing/occluded (conf = 0.0), but knees and hips are visible
+    // Bounding box cut off at mid-thigh/hips (y2 = 780 instead of floor 950)
+    const kps = new Float32Array(51);
+    // Hips: L_HIP=11, R_HIP=12 at y=600
+    kps[11 * 3] = 270; kps[11 * 3 + 1] = 600; kps[11 * 3 + 2] = 0.9;
+    kps[12 * 3] = 290; kps[12 * 3 + 1] = 600; kps[12 * 3 + 2] = 0.9;
+    // Knees: L_KNEE=13, R_KNEE=14 at y=760
+    kps[13 * 3] = 270; kps[13 * 3 + 1] = 760; kps[13 * 3 + 2] = 0.85;
+    kps[14 * 3] = 290; kps[14 * 3 + 1] = 760; kps[14 * 3 + 2] = 0.85;
+    // Ankles missing (conf = 0.0)
+    kps[15 * 3 + 2] = 0.0;
+    kps[16 * 3 + 2] = 0.0;
+
+    const detCutoff = { box: [240, 480, 320, 780], kps };
+    const pt = footPoint(detCutoff);
+    // Knee (760) + (760-600)*0.95 = 760 + 152 = 912 > 780
+    assert.ok(pt[1] >= 900, `Foot Y must extrapolate down near 912, got ${pt[1]}`);
+    assert.ok(Math.abs(pt[0] - 280) < 10, 'Foot X should center between knees');
+  });
+
+  test('isSeatedSpectator: flags squarish person sitting outside court boundary lines', () => {
+    const corners = [[0, 0], [6.1, 0], [6.1, 13.4], [0, 13.4]];
+    const court = new Court(corners, 'behind', null, 'badminton');
+
+    // Seated spectator behind court barrier: squarish box (w=80, h=90, aspect=1.12), court Y = 13.8m > 13.4m
+    const seatedDet = {
+      box: [300, 100, 380, 190],
+      court: [3.05, 13.8]
+    };
+    assert.strictEqual(isSeatedSpectator(seatedDet, court), true, 'Seated spectator outside baseline must be flagged');
+
+    // Standing athlete inside court: athletic aspect (w=60, h=150, aspect=2.5), court Y = 11.0m
+    const athleteDet = {
+      box: [280, 500, 340, 650],
+      court: [3.05, 11.0]
+    };
+    assert.strictEqual(isSeatedSpectator(athleteDet, court), false, 'Active athlete on court must not be flagged');
+  });
+
+  test('PlayerTracker: singles shirt color matching vetoes candidate wearing completely different shirt', () => {
+    const corners = [[0, 0], [6.1, 0], [6.1, 13.4], [0, 13.4]];
+    const court = new Court(corners, 'behind', null, 'badminton');
+    // Dark blue shirt histogram (bin 7 = blue)
+    const blueShirt = new Float32Array(16); blueShirt[7] = 1.0;
+    // Bright yellow/red spectator shirt histogram (bin 4 = red)
+    const redShirt = new Float32Array(16); redShirt[4] = 1.0;
+
+    const cfg = {
+      tracking: { maxSpeed: 7, maxJump: 1.5, lostTtl: 1.0 },
+      smoothing: { posAlpha: 0.45, tagAlpha: 0.25 },
+      players: [
+        { name: 'Player Blue', color: '#0055ff', team: 'B', side: 'near', hist: blueShirt }
+      ]
+    };
+    const tracker = new PlayerTracker(cfg, court, 30);
+    const p = tracker.players[0];
+
+    const blueCand = { tid: 1, court: [3.0, 10.0], hist: blueShirt };
+    const redCand = { tid: 2, court: [3.0, 10.0], hist: redShirt };
+
+    assert.strictEqual(tracker.vetoed(p, blueCand), false, 'Matching shirt must not be vetoed');
+    assert.strictEqual(tracker.vetoed(p, redCand), true, 'Completely different shirt must be vetoed in singles');
+  });
+
+  test('PlayerTracker: breaks locked track ID when shirt appearance is mismatched', () => {
+    const corners = [[0, 0], [600, 0], [600, 1000], [0, 1000]];
+    const court = new Court(corners, 'behind', null, 'badminton');
+    const blueShirt = new Float32Array(16); blueShirt[7] = 1.0;
+    const redShirt = new Float32Array(16); redShirt[4] = 1.0;
+
+    const cfg = {
+      tracking: { maxSpeed: 7, maxJump: 1.5, lostTtl: 1.0 },
+      smoothing: { posAlpha: 0.45, tagAlpha: 0.25 },
+      players: [
+        { name: 'Player Blue', color: '#0055ff', team: 'B', side: 'near', hist: blueShirt }
+      ]
+    };
+    const tracker = new PlayerTracker(cfg, court, 30);
+    // Artificially lock track 99 to player 0
+    tracker.owner.set(99, 0);
+    const p = tracker.players[0];
+    p.everSeen = true; p.pos = [3.05, 10.5]; p.trackId = 99;
+
+    // Next frame: track 99 now has a red shirt (e.g. tracking drifted to a red-shirt spectator)
+    // Box foot [300, 800] maps to [3.05, 10.72] (in play, near court)
+    const tracks = [
+      { tid: 99, box: [270, 680, 330, 800], score: 0.9, hist: redShirt }
+    ];
+    // In update, owner lock must be deleted
+    tracker.update(tracks, 0.033);
+    assert.strictEqual(tracker.owner.has(99), false, 'Owner lock must be broken on shirt mismatch');
   });
 
   // --------------------------------------------------------------------------

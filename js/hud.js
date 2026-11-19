@@ -288,11 +288,15 @@ export class HudRenderer {
   // ---------------------------------------------------------------- pose keypoints (optional)
   skeleton(ctx, p) {
     const s = this.s, k = p.kps, on = j => k[j * 3 + 2] > KP_CONF;
+    const maxBoneLen = p.box ? Math.max(p.box[3] - p.box[1], p.box[2] - p.box[0]) * 0.95 : 300 * s;
     ctx.save();
     ctx.strokeStyle = rgba(p.color, 0.85); ctx.lineWidth = Math.max(3 * s, 1.5); ctx.lineCap = 'round';
     for (const [a, b] of BONES) {
       if (!on(a) || !on(b)) continue;
-      ctx.beginPath(); ctx.moveTo(k[a * 3], k[a * 3 + 1]); ctx.lineTo(k[b * 3], k[b * 3 + 1]); ctx.stroke();
+      const ax = k[a * 3], ay = k[a * 3 + 1];
+      const bx = k[b * 3], by = k[b * 3 + 1];
+      if (Math.hypot(ax - bx, ay - by) > maxBoneLen) continue; // Khử nhiễu: bỏ qua đoạn xương biến dạng kéo dài
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
     }
     ctx.fillStyle = '#fff';
     for (let j = 5; j < 17; j++) {

@@ -6,9 +6,9 @@ export const SPORT_CONFIGS = {
     name: 'Cầu lông (Badminton)',
     W: 6.1,
     L: 13.4,
-    marginM: 1.2,
-    marginSides: 1.2,
-    marginEnds: 1.5,
+    marginM: 1.1,
+    marginSides: 1.0,
+    marginEnds: 1.2,
     shortService: 1.98,
     longServiceD: 0.76,
     singlesIn: 0.46,
@@ -36,9 +36,9 @@ export const SPORT_CONFIGS = {
     name: 'Pickleball',
     W: 6.10, // 20 feet
     L: 13.41, // 44 feet
-    marginM: 1.5,
-    marginSides: 1.2,
-    marginEnds: 1.8,
+    marginM: 1.2,
+    marginSides: 1.0,
+    marginEnds: 1.3,
     kitchen: 2.13, // 7 feet Non-Volley Zone
     lines: (W, L) => {
       const netY = L / 2, k1 = netY - 2.13, k2 = netY + 2.13;
